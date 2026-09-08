@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>คู่มือ Trade Memo Private</title>
+<style>body{font-family:system-ui,-apple-system,"Noto Sans Thai",sans-serif;max-width:900px;margin:auto;padding:24px;line-height:1.65;color:#172235}h1,h2{line-height:1.2}code{background:#eef2f7;padding:2px 5px;border-radius:5px}.box{background:#f5f7fb;border:1px solid #dce4ef;border-radius:12px;padding:14px;margin:14px 0}</style></head>
+<body>
+<h1>📓 Trade Memo Private</h1>
+<div class="box"><b>หลักการ:</b> Journal ใช้งานแบบ local-first ข้อมูลหลักอยู่ใน IndexedDB ของ browser. Google Drive, Claude และ Gemini เป็น optional integrations.</div>
+<h2>1. เปิดบนเครื่อง</h2><p>ต้องเปิดผ่าน <code>http://</code> หรือ <code>https://</code> ไม่ควรเปิด <code>file://</code> หากต้องการ PWA, IndexedDB, OAuth หรือ Service Worker</p>
+<p>ในโฟลเดอร์นี้รัน <code>python3 -m http.server 8765</code> แล้วเปิด <code>http://localhost:8765</code></p>
+<h2>2. หน้าใช้งาน</h2><ul><li>ไดอารี่: เลือกวัน, week strip, แผนก่อนเทรด, รูปกราฟ, ออเดอร์, screenshot MT5, review</li><li>สรุปผล: day/week/month/year/all, P&L, Winrate, Profit Factor, Expectancy, R:R, Drawdown, streak, equity curve, bar chart, calendar และ breakdown</li><li>ตั้งค่า: theme, currency, starting balance, Google Drive, Claude/Gemini keys, backup/import</li></ul>
+<h2>3. Backup</h2><p>กดสำรองข้อมูลเป็น JSON ไฟล์เดียว (รวมรูปเป็น Base64) แล้วเก็บไว้ใน Google Drive หรือ OneDrive ของคุณเอง</p>
+<h2>4. Google Drive</h2><p>สร้าง Google Cloud project → เปิด Drive API → OAuth consent → เพิ่มตัวเองเป็น Test user → สร้าง OAuth Web client → Authorized JavaScript origin ให้ตรงกับ URL ที่ใช้จริง → วาง Client ID ใน Settings</p>
+<h2>5. ความปลอดภัย</h2><p>อย่าเก็บ MT5 password, broker password, API secret, private key หรือ seed phrase. AI screenshot จะถูกส่งไป Anthropic หรือ Google เฉพาะเมื่อคุณกดใช้บริการนั้น.</p>
+<h2>6. ข้อจำกัดของเวอร์ชันนี้</h2><p>OCR local ปุ่มถูกเตรียมไว้ แต่ยังไม่มีการฝัง Tesseract.js ลงมา เพื่อให้เวอร์ชันฐานไม่มี dependency เพิ่มโดยอัตโนมัติ. คุณสามารถใช้เพิ่ม trade แบบ manual หรือ Claude/Gemini ได้ทันทีเมื่อใส่ key.</p>
+</body></html><p><b>V3:</b> Setup dropdown + เพิ่ม Setup เอง, สถิติ Asset × Setup, รองรับ camera capture บนมือถือ, Gemini default ใช้ <code>gemini-3.8-flash</code> ซึ่งเป็น GA ในเดือนกันยายน 2026.</p>
