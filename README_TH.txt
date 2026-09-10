@@ -44,3 +44,5 @@ Google Drive และ OneDrive ใช้เก็บ backup ได้ แต่
 - Mobile camera capture
 - Gemini default: gemini-3.8-flash (GA as of Sep 2026)
 - AI confirmation before sending screenshot
+
+V3.1 final: merged local+remote image metadata so downloaded images retain diary date/type.
