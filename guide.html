@@ -1,12 +1,61 @@
-<!doctype html><html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>คู่มือ Trade Memo Private v4</title><style>body{font-family:system-ui,-apple-system,"Noto Sans Thai",sans-serif;max-width:900px;margin:auto;padding:24px;line-height:1.65;color:#172235}h1,h2{line-height:1.2}code{background:#eef2f7;padding:2px 5px;border-radius:5px}.box{background:#f5f7fb;border:1px solid #dce4ef;border-radius:12px;padding:14px;margin:14px 0}table{border-collapse:collapse;width:100%}td,th{border:1px solid #dce4ef;padding:7px;text-align:left;font-size:14px}</style></head><body>
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>คู่มือ Trade Memo Private v4</title>
+<style>
+body{font-family:system-ui,-apple-system,"Noto Sans Thai",sans-serif;max-width:900px;margin:auto;padding:24px;line-height:1.65;color:#172235}
+h1,h2{line-height:1.2}
+code{background:#eef2f7;padding:2px 5px;border-radius:5px}
+.box{background:#f5f7fb;border:1px solid #dce4ef;border-radius:12px;padding:14px;margin:14px 0}
+table{border-collapse:collapse;width:100%}
+td,th{border:1px solid #dce4ef;padding:7px;text-align:left;font-size:14px}
+</style>
+</head>
+<body>
 <h1>📓 Trade Memo Private v4</h1>
-<div class="box"><b>หลักการ:</b> Journal ใช้งานแบบ local-first ข้อมูลหลักอยู่ใน IndexedDB ของ browser. Google Drive, Claude, Gemini และ Excel reader เป็น optional integrations.</div>
-<h2>1. นำเข้า Order หลายรายการ</h2><p>ในหน้า Diary กด <b>📥 อ่านจาก MT5</b> แล้วเลือกได้ 3 แบบ:</p><ul><li><b>📷 เลือกภาพหลายภาพ</b> — ส่งภาพเป็นชุดให้ Gemini/Claude อ่าน และรวมผลให้ตรวจสอบก่อนบันทึก</li><li><b>🗂️ CSV</b> — อ่านไฟล์ข้อความโดยรองรับ comma / semicolon / tab</li><li><b>📊 Excel</b> — อ่านไฟล์ <code>.xlsx</code> จาก Sheet แรก</li></ul>
-<h2>2. การปรับเวลา</h2><p>ค่าเริ่มต้นคือ <b>+7 ชั่วโมง</b> จากเวลา MT5 ไปเป็นเวลาไทย. ระบบปรับทั้งวันที่และเวลา <b>ตอนนำเข้า/บันทึก Order</b>. เช่น <code>2026.09.18 20:30:00</code> จะเป็น <code>2026-09-19 03:30:00</code>.</p><p>เปลี่ยนค่าได้ที่ <b>ตั้งค่า → ปรับเวลาจาก MT5 → เวลาไทย</b>.</p>
-<h2>3. การ Preview</h2><p>ก่อนบันทึก ระบบจะแสดงวันที่, Symbol, Side, Lot, เวลาเข้า/ออก, P&amp;L และ Ticket. คุณสามารถเอาเครื่องหมายถูกออกจากรายการที่ไม่ต้องการบันทึกได้.</p>
-<h2>4. CSV/Excel</h2><p>ระบบจับคู่ชื่อคอลัมน์ที่พบบ่อย เช่น:</p><table><tr><th>ข้อมูล</th><th>ตัวอย่างชื่อคอลัมน์</th></tr><tr><td>Symbol</td><td>Symbol, Asset, Instrument</td></tr><tr><td>ฝั่ง</td><td>Type, Side, Direction</td></tr><tr><td>Lot</td><td>Volume, Lot, Lots</td></tr><tr><td>เวลาเข้า</td><td>Open Time, Entry Time</td></tr><tr><td>เวลาออก</td><td>Close Time, Exit Time</td></tr><tr><td>ราคา</td><td>Open Price, Close Price, Entry Price, Exit Price</td></tr><tr><td>ผลลัพธ์</td><td>Profit, P&amp;L, Net Profit</td></tr><tr><td>ต้นทุน</td><td>Commission, Swap</td></tr><tr><td>อ้างอิง</td><td>Ticket, Position, Order ID</td></tr></table><p>แนะนำให้ 1 แถว = 1 Order ที่ต้องการบันทึก. ถ้า Export ของ MT5 แยก Open/Close เป็นคนละ Deal row และต้องจับคู่กันเอง โครงสร้างนั้นอาจต้องจัดเป็นไฟล์สรุปก่อน.</p>
-<h2>5. Standard / Cent</h2><p>Symbol ที่ลงท้ายด้วยตัว <code>c</code> จะถูกเก็บเป็น Cent เช่น <code>XAUUSDc</code> และ Dashboard/Diary จะแยกผลกับ Standard ต่อไป.</p>
-<h2>6. เปิดใช้บนเครื่อง</h2><p>รัน <code>python3 -m http.server 8765</code> แล้วเปิด <code>http://localhost:8765</code>. สำหรับ GitHub Pages ให้อัปโหลดไฟล์ทั้งหมดในโฟลเดอร์นี้.</p>
-<h2>7. ความเป็นส่วนตัว</h2><p>ข้อมูลหลักอยู่ใน IndexedDB ของ browser. CSV/Excel ถูกอ่านใน browser. ภาพจะถูกส่งไป Gemini/Claude เฉพาะเมื่อคุณกดใช้ AI. อย่าเก็บ password, private key หรือ seed phrase.</p>
+<div class="box"><b>หลักการ:</b> Journal ใช้งานแบบ local-first ข้อมูลหลักอยู่ใน IndexedDB ของ browser. Google Drive, Gemini AI และ Excel reader เป็น optional integrations.</div>
+
+<h2>1. นำเข้า Order หลายรายการ</h2>
+<p>ในหน้า Diary กด <b>📥 อ่านจาก MT5</b> แล้วเลือกได้ 3 แบบ:</p>
+<ul>
+ <li><b>📷 เลือกภาพหลายภาพ</b> — ส่งภาพเป็นชุดให้ Gemini AI อ่าน และรวมผลให้ตรวจสอบก่อนบันทึก</li>
+ <li><b>🗂️ CSV</b> — อ่านไฟล์ข้อความโดยรองรับ comma / semicolon / tab</li>
+ <li><b>📊 Excel</b> — อ่านไฟล์ <code>.xlsx</code> จาก Sheet แรก</li>
+</ul>
+
+<h2>2. การปรับเวลา</h2>
+<p>ค่าเริ่มต้นคือ <b>+7 ชั่วโมง (420 นาที)</b> จากเวลา MT5 ไปเป็นเวลาไทย. ระบบปรับทั้งวันที่และเวลา <b>ตอนนำเข้า/บันทึก Order</b>. เช่น <code>2026.09.18 20:30:00</code> จะเป็น <code>2026-09-19 03:30:00</code>.</p>
+<p>เปลี่ยนค่าได้ที่ <b>ตั้งค่า → ปรับเวลาจาก MT5 → เวลาไทย</b>.</p>
+
+<h2>3. การ Preview</h2>
+<p>ก่อนบันทึก ระบบจะแสดงวันที่, Symbol, Side, Lot, เวลาเข้า/ออก, P&amp;L และ Ticket. คุณสามารถเอาเครื่องหมายถูกออกจากรายการที่ไม่ต้องการบันทึกได้.</p>
+
+<h2>4. CSV/Excel</h2>
+<p>ระบบจับคู่ชื่อคอลัมน์ที่พบบ่อย เช่น:</p>
+<table>
+ <tr><th>ข้อมูล</th><th>ตัวอย่างชื่อคอลัมน์</th></tr>
+ <tr><td>Symbol</td><td>Symbol, Asset, Instrument</td></tr>
+ <tr><td>ฝั่ง</td><td>Type, Side, Direction</td></tr>
+ <tr><td>Lot</td><td>Volume, Lot, Lots</td></tr>
+ <tr><td>เวลาเข้า</td><td>Open Time, Entry Time</td></tr>
+ <tr><td>เวลาออก</td><td>Close Time, Exit Time</td></tr>
+ <tr><td>ราคา</td><td>Open Price, Close Price, Entry Price, Exit Price</td></tr>
+ <tr><td>ผลลัพธ์</td><td>Profit, P&amp;L, Net Profit</td></tr>
+ <tr><td>ต้นทุน</td><td>Commission, Swap</td></tr>
+ <tr><td>อ้างอิง</td><td>Ticket, Position, Order ID</td></tr>
+</table>
+<p>แนะนำให้ 1 แถว = 1 Order ที่ต้องการบันทึก. ถ้า Export ของ MT5 แยก Open/Close เป็นคนละ Deal row และต้องจับคู่กันเอง โครงสร้างนั้นอาจต้องจัดเป็นไฟล์สรุปก่อน.</p>
+
+<h2>5. Standard / Cent</h2>
+<p>Symbol ที่ลงท้ายด้วยตัว <code>c</code> จะถูกเก็บเป็น Cent เช่น <code>XAUUSDc</code> และ Dashboard/Diary จะแยกผลกับ Standard ต่อไป.</p>
+
+<h2>6. เปิดใช้บนเครื่อง</h2>
+<p>รัน <code>python3 -m http.server 8765</code> แล้วเปิด <code>http://localhost:8765</code>. สำหรับ GitHub Pages ให้อัปโหลดไฟล์ทั้งหมดในโฟลเดอร์นี้.</p>
+
+<h2>7. ความเป็นส่วนตัว</h2>
+<p>ข้อมูลหลักอยู่ใน IndexedDB ของ browser. CSV/Excel ถูกอ่านใน browser. ภาพจะถูกส่งไป Gemini เฉพาะเมื่อคุณกดใช้ AI. อย่าเก็บ password, private key หรือ seed phrase.</p>
 <p class="box"><b>Excel:</b> ตัวอ่าน <code>.xlsx</code> โหลด SheetJS จาก CDN เมื่อกดนำเข้า Excel ดังนั้นครั้งแรกที่ใช้งาน Excel ต้องต่ออินเทอร์เน็ต.</p>
-</body></html>
+</body>
+</html>
