@@ -410,7 +410,7 @@ function normalizeImportedTrade(raw,fallbackDate=state.date,source='file'){
  const sl=parseNumFlexible(firstField(raw,['S/L','SL','Stop Loss','StopLoss','จุดตัดขาดทุน']));
  const tp=parseNumFlexible(firstField(raw,['T/P','TP','Take Profit','TakeProfit','จุดทำกำไร']));
  const setup=String(firstField(raw,['Setup','Strategy','Plan','แผน','กลยุทธ์'])||'').trim();
- const notes=String(firstField(raw,['Comment','Notes','Note','Comment / Notes','หมายเหตุ','close_reason'])||Close by'').trim();
+ const notes=String(firstField(raw,['Comment','Notes','Note','Comment / Notes','หมายเหตุ','close_reason'])||'').trim();
  const journalDate=xa.date||ea.date||fallbackDate;
  return {symbol,side,lots,entryPrice,exitPrice,pnl,commission,swap,ticket,sl,tp,setup,notes,entryTime:ea.time,exitTime:xa.time,entryDate:ea.date,exitDate:xa.date,journalDate,rawEntryTime:entrySource,rawExitTime:exitSource,rawEntryDate:entryDateRaw,rawExitDate:exitDateRaw,timeAdjustedMinutes:offset,importSource:source};
 }
