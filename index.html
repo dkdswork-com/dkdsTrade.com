@@ -390,10 +390,10 @@ function shiftWallDateTime(date,time,offsetMinutes){
  return {date:`${dt.getUTCFullYear()}-${String(dt.getUTCMonth()+1).padStart(2,'0')}-${String(dt.getUTCDate()).padStart(2,'0')}`,time:`${String(dt.getUTCHours()).padStart(2,'0')}:${String(dt.getUTCMinutes()).padStart(2,'0')}${m[3]?':'+String(dt.getUTCSeconds()).padStart(2,'0'):''}`};
 }
 function normalizeImportedTrade(raw,fallbackDate=state.date,source='file'){
- const entryDateRaw=firstField(raw,['entryDate','openDate','dateOpen','Open Date','วันที่เปิด','วันที่เข้า']);
- const exitDateRaw=firstField(raw,['exitDate','closeDate','dateClose','Close Date','วันที่ปิด','วันที่ออก']);
- const entryTimeRaw=firstField(raw,['entryAt','openDateTime','Open Time','Entry Time','entryTime','เวลาเข้า','เวลาเปิด','Open']);
- const exitTimeRaw=firstField(raw,['exitAt','closeDateTime','Close Time','Exit Time','exitTime','เวลาออก','เวลาปิด','Close']);
+ const entryDateRaw=firstField(raw,['entryDate','openDate','dateOpen','Open Date','วันที่เปิด','วันที่เข้า','opening_time_utc']);
+ const exitDateRaw=firstField(raw,['exitDate','closeDate','dateClose','Close Date','วันที่ปิด','วันที่ออก','closing_time_utc']);
+ const entryTimeRaw=firstField(raw,['entryAt','openDateTime','Open Time','Entry Time','entryTime','เวลาเข้า','เวลาเปิด','Open','opening_time_utc']);
+ const exitTimeRaw=firstField(raw,['exitAt','closeDateTime','Close Time','Exit Time','exitTime','เวลาออก','เวลาปิด','Close','closing_time_utc']);
  const genericTime=firstField(raw,['Date Time','Datetime','Time','เวลา']);
  const entrySource=entryTimeRaw||genericTime;const exitSource=exitTimeRaw;
  const ep=parseDateTimeParts(entryDateRaw,entrySource,fallbackDate);const xp=parseDateTimeParts(exitDateRaw,exitSource,ep.date||fallbackDate);
@@ -401,8 +401,8 @@ function normalizeImportedTrade(raw,fallbackDate=state.date,source='file'){
  const symbol=normalizeSymbol(firstField(raw,['Symbol','Asset','Instrument','ชื่อสินทรัพย์','สินทรัพย์','คู่เงิน']));
  const side=normalizeSide(firstField(raw,['Side','Type','Direction','Order Type','ฝั่ง','ประเภท']));
  const lots=parseNumFlexible(firstField(raw,['Lots','Lot','Volume','Size','Quantity','ปริมาณ']));
- const entryPrice=parseNumFlexible(firstField(raw,['Entry Price','Open Price','Price Open','ราคาเข้า','ราคาเปิด']));
- const exitPrice=parseNumFlexible(firstField(raw,['Exit Price','Close Price','Price Close','ราคาออก','ราคาปิด'])) || parseNumFlexible(firstField(raw,['Close Price 2','Price']));
+ const entryPrice=parseNumFlexible(firstField(raw,['Entry Price','Open Price','Price Open','ราคาเข้า','ราคาเปิด','opening_price']));
+ const exitPrice=parseNumFlexible(firstField(raw,['Exit Price','Close Price','Price Close','ราคาออก','ราคาปิด','closing_price'])) || parseNumFlexible(firstField(raw,['Close Price 2','Price']));
  const pnl=parseNumFlexible(firstField(raw,['P&L','PnL','Pnl','PL','Profit','Net Profit','Profit/Loss','กำไร','กำไร/ขาดทุน','ผลกำไร']));
  const commission=parseNumFlexible(firstField(raw,['Commission','ค่าคอม','ค่าคอมมิชชั่น']));
  const swap=parseNumFlexible(firstField(raw,['Swap','สวอป']));
@@ -410,7 +410,7 @@ function normalizeImportedTrade(raw,fallbackDate=state.date,source='file'){
  const sl=parseNumFlexible(firstField(raw,['S/L','SL','Stop Loss','StopLoss','จุดตัดขาดทุน']));
  const tp=parseNumFlexible(firstField(raw,['T/P','TP','Take Profit','TakeProfit','จุดทำกำไร']));
  const setup=String(firstField(raw,['Setup','Strategy','Plan','แผน','กลยุทธ์'])||'').trim();
- const notes=String(firstField(raw,['Comment','Notes','Note','Comment / Notes','หมายเหตุ'])||'').trim();
+ const notes=String(firstField(raw,['Comment','Notes','Note','Comment / Notes','หมายเหตุ','close_reason'])||'').trim();
  const journalDate=xa.date||ea.date||fallbackDate;
  return {symbol,side,lots,entryPrice,exitPrice,pnl,commission,swap,ticket,sl,tp,setup,notes,entryTime:ea.time,exitTime:xa.time,entryDate:ea.date,exitDate:xa.date,journalDate,rawEntryTime:entrySource,rawExitTime:exitSource,rawEntryDate:entryDateRaw,rawExitDate:exitDateRaw,timeAdjustedMinutes:offset,importSource:source};
 }
