@@ -100,7 +100,7 @@ let tokenClient = null;
 
 let db, state={
  view:'diary', date:today(), period:'month', anchor:today(), portFilter:'all', cal:new Date(),
- day:null, days:[], settings:{currency:'USD',startingBalance:0,theme:'dark',driveClientId:'',driveFolderName:'Trade Memo',geminiKey:'',geminiModel:'gemini-3.5-flash-lite',lastSymbol:'',lastSync:'',timeOffsetMinutes:DEFAULT_TIME_OFFSET_MINUTES},
+ day:null, days:[], settings:{currency:'USD',startingBalance:0,theme:'dark',driveClientId:'',driveFolderName:'Trade Memo',geminiKey:'',geminiModel:'gemini-2.5-flash',lastSymbol:'',lastSync:'',timeOffsetMinutes:DEFAULT_TIME_OFFSET_MINUTES},
  objectUrls:new Map()
 };
 
@@ -123,7 +123,7 @@ const del=(name,key)=>new Promise((res,rej)=>{const r=store(name,'readwrite').de
 
 function blankDay(date){return {date,createdAt:Date.now(),updatedAt:Date.now(),plan:{bias:'',setup:'',entryRules:'',riskNotes:''},review:{mood:'',notes:''},trades:[]};}
 async function getDay(date){let d=await get('days',date);if(!d){d=blankDay(date);await put('days',d)}return d}
-async function loadData(){await openDB();state.days=await all('days');const ss=await all('settings');for(const x of ss)state.settings[x.key]=x.value;const defaults={currency:'USD',startingBalance:0,theme:'dark',driveFolderName:'Trade Memo',geminiModel:'gemini-3.5-flash-lite',timeOffsetMinutes:DEFAULT_TIME_OFFSET_MINUTES};for(const [k,v] of Object.entries(defaults)){if(state.settings[k]===undefined){state.settings[k]=v;await put('settings',{key:k,value:v});}}document.documentElement.dataset.theme=state.settings.theme||'dark';}
+async function loadData(){await openDB();state.days=await all('days');const ss=await all('settings');for(const x of ss)state.settings[x.key]=x.value;const defaults={currency:'USD',startingBalance:0,theme:'dark',driveFolderName:'Trade Memo',geminiModel:'gemini-2.5-flash',timeOffsetMinutes:DEFAULT_TIME_OFFSET_MINUTES};for(const [k,v] of Object.entries(defaults)){if(state.settings[k]===undefined){state.settings[k]=v;await put('settings',{key:k,value:v});}}document.documentElement.dataset.theme=state.settings.theme||'dark';}
 
 function tradeNet(t){return num(t.pnl)+num(t.commission)+num(t.swap);}
 function metrics(trades){
@@ -452,7 +452,7 @@ async function aiParseImages(c,imagesList){
    $('#aiOut',c).textContent=`กำลังอ่านภาพชุด ${bi+1}/${batches.length} (${batches[bi].length} ภาพ)…`;
    const parts=[];for(const blob of batches[bi])parts.push({blob,b64:await blob64(blob)});
    let result='';
-   const model=state.settings.geminiModel||'gemini-3.5-flash-lite';
+   const model=state.settings.geminiModel||'gemini-2.5-flash';
    const endpoint=`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`;
    let r,j,lastErr='';
    const gemParts=[{text:buildAITradePrompt(parts.length)},...parts.map(x=>({inlineData:{mimeType:x.blob.type||'image/png',data:x.b64}}))];
@@ -579,7 +579,7 @@ async function settings(app){
  <div class="stack">
   <div class="notice">ใส่ Gemini API Key เพื่อเปิดใช้งานระบบ AI อ่านภาพประวัติการเทรด MT5 อัตโนมัติ (รับ API Key ได้ฟรีจาก Google AI Studio)</div>
   <label class="field"><span>Gemini API Key</span><input id="setGeminiKey" type="password" value="${esc(state.settings.geminiKey||'')}" placeholder="AIzaSy..."></label>
-  <label class="field"><span>Gemini Model</span><input id="setGeminiModel" value="${esc(state.settings.geminiModel||'gemini-3.5-flash-lite')}" placeholder="gemini-3.5-flash-lite"></label>
+  <label class="field"><span>Gemini Model</span><input id="setGeminiModel" value="${esc(state.settings.geminiModel||'gemini-2.5-flash')}" placeholder="gemini-2.5-flash"></label>
   <div class="row"><button class="btn primary" id="saveGemini">บันทึก Gemini Key</button></div>
  </div>
  </section>
@@ -616,7 +616,7 @@ async function settings(app){
 
  $('#saveGemini').onclick=async()=>{
   state.settings.geminiKey=$('#setGeminiKey').value.trim();
-  state.settings.geminiModel=$('#setGeminiModel').value.trim()||'gemini-3.5-flash-lite';
+  state.settings.geminiModel=$('#setGeminiModel').value.trim()||'gemini-2.5-flash';
   await put('settings',{key:'geminiKey',value:state.settings.geminiKey});
   await put('settings',{key:'geminiModel',value:state.settings.geminiModel});
   toast('บันทึกคีย์ Gemini เรียบร้อย','ok');
