@@ -7,6 +7,8 @@
 <meta name="description" content="Private, local-first trading journal">
 <link rel="manifest" href="manifest.json">
 <title>📓 Trade Memo Private</title>
+<!-- นำเข้าไลบรารี SheetJS สำหรับการอ่านไฟล์ Excel (.xlsx) แบบออฟไลน์ -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 :root{
  --bg:#0b1220;--bg2:#0f1728;--card:#121c2f;--card2:#18243a;--line:#273652;
@@ -87,7 +89,7 @@ const $=(q,r=document)=>r.querySelector(q), $$=(q,r=document)=>[...r.querySelect
 const isCent = t => (t.symbol||'').trim().endsWith('c');
 let db, state={
  view:'diary', date:today(), period:'month', anchor:today(), portFilter:'all', cal:new Date(),
- day:null, days:[], settings:{currency:'USD',startingBalance:0,theme:'dark',driveClientId:'',driveFolderName:'Trade Memo',claudeKey:'',claudeModel:'',geminiKey:'',geminiModel:'',lastSymbol:'',lastSync:''},
+ day:null, days:[], settings:{currency:'USD',startingBalance:0,theme:'dark',driveClientId:'',driveFolderName:'Trade Memo',claudeKey:'',claudeModel:'',geminiKey:'',geminiModel:'',lastSymbol:'',lastSync:'',timeOffsetMinutes: 0},
  objectUrls:new Map()
 };
 
@@ -96,6 +98,17 @@ function openModal(html,wide=false){const m=$('#modal'),c=$('#modalCard');c.clas
 function closeModal(){const m=$('#modal'),c=$('#modalCard');m.hidden=true;c.innerHTML='';c._onPaste=null;document.body.style.overflow='';}
 $('#modal').addEventListener('click',e=>{if(e.target===$('#modal'))closeModal()});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('#modal').hidden)closeModal()});
+document.addEventListener('paste', e=>{
+    if(!$('#modal').hidden && $('#modalCard')._onPaste){
+        const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+        for (let index in items) {
+            const item = items[index];
+            if (item.kind === 'file' && item.type.startsWith('image/')) {
+                $('#modalCard')._onPaste(item.getAsFile());
+            }
+        }
+    }
+});
 
 function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open(DB,VER);r.onupgradeneeded=()=>{const d=r.result;
  if(!d.objectStoreNames.contains('days'))d.createObjectStore('days',{keyPath:'date'});
@@ -157,9 +170,7 @@ function drawBars(items,w=900,h=210){if(!items.length)return `<div class="muted"
  items.forEach((it,i)=>{const cx=pl+slot*i+slot/2,yy=y(it.value),top=Math.min(y0,yy),hh=Math.max(2,Math.abs(yy-y0)),cl=it.value>0?'pos':it.value<0?'neg':'flat';s+=`<rect class="bar ${cl}" x="${cx-bw/2}" y="${top}" width="${bw}" height="${hh}" rx="3"/>`;if(i%every===0)s+=`<text class="tick" x="${cx}" y="${H-8}" text-anchor="middle">${esc(it.label)}</text>`});return s+'</svg>';
 }
 function donut(ratio){const p=Math.max(0,Math.min(1,ratio)),r=43,c=2*Math.PI*r,d=p*c;return `<div class="donut"><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="${r}" fill="none" stroke="var(--line)" stroke-width="10"/><circle cx="50" cy="50" r="${r}" fill="none" stroke="var(--pos)" stroke-width="10" stroke-linecap="round" stroke-dasharray="${d} ${c-d}"/></svg><div class="center">${(p*100).toFixed(0)}%</div></div>`}
-function calHtml(year,month,map){const first=new Date(year,month,1),days=new Date(year,month+1,0).getDate(),start=(first.getDay()+6)%7,max=Math.max(1,...[...map.values()].map(x=>Math.abs(x.net)));let h=`<div class="head">${['จ','อ','พ','พฤ','ศ','ส','อา'].map(x=>`<span>${x}</span>`).join('')}</div><div class="calgrid">`;for(let i=0;i<start;i++)h+=`<span class="calcell empty"></span>`;for(let d=1;d<=days;d++){const k=`${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`,x=map.get(k),int=x?(.25+.75*Math.min(1,Math.abs(x.net)/max)):0;let cl='calcell';if(x&&x.count)cl+=x.net>0?' pos':x.net<0?' neg':'';else if(x&&x.hasNote)cl+=' noted';h+=`<button class="${cl}" style="--i:${int}" data-cal="${k}"><span class="d">${d}</span>${x&&x.count?`<span class="v ${x.net>=0?'pos':'neg'}">${x.net>=0?'+':''}${x.net.toFixed(0)}</span>`:''}</button>`}return h+'</div>'}
 function groupTable(title, groups, cur){return `<section class="card"><div class="card-head"><h3>${esc(title)}</h3></div>${groups.length?`<div class="table-wrap"><table class="table"><thead><tr><th></th><th>เทรด</th><th>Winrate</th><th>กำไร</th></tr></thead><tbody>${groups.map(g=>`<tr><td>${esc(g.label)}</td><td>${g.m.total}</td><td>${(g.m.winrate*100).toFixed(1)}%</td><td class="${g.m.net>=0?'pos':'neg'}"><b>${signed(g.m.net,cur)}</b></td></tr>`).join('')}</tbody></table></div>`:'<div class="muted">ไม่มีข้อมูล</div>'}</section>`}
-function group(trades,keyFn,labelFn){const m=new Map();trades.forEach(t=>{const k=keyFn(t);if(!m.has(k))m.set(k,[]);m.get(k).push(t)});return [...m.entries()].sort((a,b)=>String(a[0]).localeCompare(String(b[0]))).map(([k,v])=>({label:labelFn(k),m:metrics(v),trades:v}))}
 
 function setupOptions(){
   const base=['QM','Double Top','Double Bottom','M Pattern','W Pattern','Liquidity Sweep','BOS / CHoCH'];
@@ -170,19 +181,14 @@ function setupSelect(name,value=''){
   return `<select name="${name}"><option value="">— เลือกแผน —</option>${setupOptions().map(x=>`<option value="${esc(x)}" ${value===x?'selected':''}>${esc(x)}</option>`).join('')}<option value="__OTHER__">อื่น ๆ / เพิ่มใหม่</option></select>`;
 }
 function setupAnalytics(trades){
-  const asset=new Map(), setup=new Map(), matrix=new Map();
+  const asset=new Map(), setup=new Map();
   for(const t of trades){
     const a=(t.symbol||'—').toUpperCase(), s=t.setup||'ไม่ระบุ';
     if(!asset.has(a))asset.set(a,[]); asset.get(a).push(t);
     if(!setup.has(s))setup.set(s,[]); setup.get(s).push(t);
-    const k=a+'||'+s;if(!matrix.has(k))matrix.set(k,[]);matrix.get(k).push(t);
   }
-  const rows=(mp,arrLabel)=>
-    [...mp.entries()].map(([k,v])=>({label:k,m:metrics(v),trades:v})).sort((a,b)=>b.m.net-a.m.net);
-  return {asset:rows(asset),setup:rows(setup),matrix:[...matrix.entries()].map(([k,v])=>({label:k.split('||'),m:metrics(v),trades:v})).sort((a,b)=>b.m.net-a.m.net)};
-}
-function setupStatsTable(title,rows, cur){
-  return `<section class="card"><div class="card-head"><h3>${esc(title)}</h3></div>${rows.length?`<div class="table-wrap"><table class="table"><thead><tr><th>กลุ่ม</th><th>ไม้</th><th>Winrate</th><th>PF</th><th>Expectancy</th><th>P&L</th></tr></thead><tbody>${rows.map(r=>`<tr><td><b>${Array.isArray(r.label)?r.label.map(esc).join(' × '):esc(r.label)}</b></td><td>${r.m.total}</td><td>${(r.m.winrate*100).toFixed(1)}%</td><td>${Number.isFinite(r.m.profitFactor)?r.m.profitFactor.toFixed(2):'∞'}</td><td class="${r.m.expectancy>=0?'pos':'neg'}">${signed(r.m.expectancy,cur)}</td><td class="${r.m.net>=0?'pos':'neg'}"><b>${signed(r.m.net,cur)}</b></td></tr>`).join('')}</tbody></table></div>`:'<div class="muted">ยังไม่มีข้อมูล</div>'}</section>`;
+  const rows=(mp)=> [...mp.entries()].map(([k,v])=>({label:k,m:metrics(v),trades:v})).sort((a,b)=>b.m.net-a.m.net);
+  return {asset:rows(asset),setup:rows(setup)};
 }
 function setupManager(){
   const opts=setupOptions();
@@ -260,7 +266,7 @@ async function diary(app){
  <label class="field"><span>Setup วันนี้เป็นยังไง</span><textarea data-bind="plan.setup" placeholder="เช่น ราคาอยู่ในโซน demand H4, รอ break structure ใน M15 แล้วค่อยเข้า…">${esc(d.plan.setup)}</textarea></label>
  <div class="grid2"><label class="field"><span>เงื่อนไขเข้า / ออก</span><textarea data-bind="plan.entryRules" placeholder="เข้าเมื่อ… ออกเมื่อ… SL ที่… TP ที่…">${esc(d.plan.entryRules)}</textarea></label><label class="field"><span>ความเสี่ยง / lot / ข่าว</span><textarea data-bind="plan.riskNotes" placeholder="เสี่ยง 1% ต่อไม้, ข่าว NFP…">${esc(d.plan.riskNotes)}</textarea></label></div>
  <div><div class="small muted" style="margin-bottom:7px">รูปกราฟที่วาดไว้</div><div class="imgs" id="planImgs">${imagesHtml(planImgs,'plan')}</div></div></div></section>
- <section class="card"><div class="card-head"><h2>📈 ออเดอร์วันนี้</h2><div class="row"><button class="btn soft small" id="readMT5">📷 อ่านจาก MT5</button><button class="btn small" id="addTrade">＋ เพิ่ม</button></div></div>
+ <section class="card"><div class="card-head"><h2>📈 ออเดอร์วันนี้</h2><div class="row"><button class="btn soft small" id="readMT5">📥 ดึงข้อมูล/อ่านรูปภาพ</button><button class="btn small" id="addTrade">＋ เพิ่ม</button></div></div>
  ${tilesHtml}
  <div id="tradeList">${await tradeListHtml(d.trades,state.date)}</div>
  <details style="margin-top:12px" ${mt5Imgs.length?'open':''}><summary>ภาพหน้าจอ MT5 ที่บันทึกไว้</summary><div class="imgs" id="mt5Imgs" style="margin-top:8px">${imagesHtml(mt5Imgs,'mt5')}</div></details>
@@ -320,153 +326,455 @@ async function previewToday(){
  const c=openModal(`<div class="modal-head"><h3>👁️ พรีวิวสรุปวันนี้</h3><button class="iconbtn" data-x>✕</button></div><section class="card" style="box-shadow:none"><h2>${thDate(state.date)}</h2>${html}${imgs.length?`<div class="imgs" style="margin-top:12px">${imgs.map(i=>`<img src="${imgUrl(i)}" style="width:150px;height:90px;object-fit:cover;border-radius:10px;border:1px solid var(--line)">`).join('')}</div>`:''}<hr style="margin:14px 0"><div class="small">${esc(state.day.review.notes||'ยังไม่มีสรุปหลังเทรด')}</div></section><div class="modal-foot"><button class="btn" data-x>ปิด</button></div>`);$$('[data-x]',c).forEach(b=>b.onclick=closeModal)
 }
 
-async function mt5Modal(){
- const c=openModal(`<div class="modal-head"><h3>📷 อ่านจาก MT5</h3><button class="iconbtn" data-x>✕</button></div><div class="stack"><div class="notice">คุณสามารถเลือก screenshot, ลากไฟล์มาวาง หรือกด Ctrl/Cmd+V เพื่อวางภาพจาก clipboard ได้ ข้อมูลจะไม่ถูกส่งไปภายนอกในโหมด OCR แบบ local</div><div class="row"><button class="btn primary" id="pickMT5">📁 เลือกภาพ</button><button class="btn" id="cameraMT5">📷 ถ่ายภาพ</button><button class="btn" id="ocrLocal">OCR ในเครื่อง</button><button class="btn" id="aiClaude">Claude</button><button class="btn" id="aiGemini">Gemini</button></div><div id="aiOut" class="muted small">ยังไม่ได้เลือกภาพ</div></div>`);
- $$('[data-x]',c).forEach(b=>b.onclick=closeModal);let blob=null;
- $('#pickMT5',c).onclick=()=>{const i=document.createElement('input');i.type='file';i.accept='image/*';i.onchange=()=>{blob=i.files[0];showImageBlob(c,blob)};i.click()};
- $('#cameraMT5',c).onclick=()=>{const i=document.createElement('input');i.type='file';i.accept='image/*';i.capture='environment';i.onchange=()=>{blob=i.files[0];showImageBlob(c,blob)};i.click()};
- c._onPaste=b=>{blob=b;showImageBlob(c,b)};
- $('#ocrLocal',c).onclick=async()=>{if(!blob)return toast('ยังไม่ได้เลือกภาพ','err');await saveMT5Image(blob);$('#aiOut',c).innerHTML='<b>OCR local</b><br>ฟังก์ชันนี้เตรียมไว้ให้ใช้ Tesseract.js โดยเพิ่มไลบรารีในเวอร์ชันถัดไป; ขณะนี้คุณสามารถแนบภาพ MT5 แล้วกรอกตัวเลขด้วยฟอร์มได้';};
- $('#aiClaude',c).onclick=()=>{if(confirm('ภาพนี้จะถูกส่งไป Anthropic เพื่อวิเคราะห์ ต้องการดำเนินการต่อหรือไม่?'))aiParse(c,blob,'claude')}; $('#aiGemini',c).onclick=()=>{if(confirm('ภาพนี้จะถูกส่งไป Google Gemini เพื่อวิเคราะห์ ต้องการดำเนินการต่อหรือไม่?'))aiParse(c,blob,'gemini')};
-}
-function showImageBlob(c,b){$('#aiOut',c).innerHTML=`<img src="${URL.createObjectURL(b)}" style="max-width:100%;max-height:260px;border-radius:10px"><div class="small muted" style="margin-top:7px">พร้อมอ่าน / บันทึกภาพ</div>`}
-async function saveMT5Image(blob){await addImage(blob,state.date,'mt5');toast('บันทึกภาพ MT5 แล้ว','ok');}
+async function saveMT5Image(blob){await addImage(blob,state.date,'mt5');}
 async function blob64(blob){return new Promise((res,rej)=>{const fr=new FileReader();fr.onload=()=>res(fr.result.split(',')[1]);fr.onerror=()=>rej(fr.error);fr.readAsDataURL(blob)})}
-function adjustHHMM(value,offsetMinutes){if(!value)return value;const m=String(value).match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/);if(!m)return value;let mins=Number(m[1])*60+Number(m[2])+Number(offsetMinutes||0);mins=((mins%1440)+1440)%1440;return `${String(Math.floor(mins/60)).padStart(2,'0')}:${String(mins%60).padStart(2,'0')}`;}
-async function saveScalarSetting(key,value){state.settings[key]=value;await put('settings',{key,value});state.settings.syncRevision=Date.now();await put('settings',{key:'syncRevision',value:state.settings.syncRevision});}
-async function aiParse(c,blob,engine){
- if(!blob)return toast('ยังไม่ได้เลือกภาพ','err');
- const key=state.settings[engine+'Key'];if(!key){toast(`ยังไม่ได้ใส่ ${engine} API key ในตั้งค่า`,'err');return}
- $('#aiOut',c).innerHTML='กำลังอ่านภาพ…';
- try{
-  const b64=await blob64(blob);let result='';
-  if(engine==='claude'){
-   const model=state.settings.claudeModel||'claude-3-5-sonnet-latest';
-   const r=await fetch('[https://api.anthropic.com/v1/messages](https://api.anthropic.com/v1/messages)',{method:'POST',headers:{'content-type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model,max_tokens:1800,messages:[{role:'user',content:[{type:'text',text:'อ่านรายการเทรดจากภาพ MT5 และตอบเป็น JSON เท่านั้น รูปแบบ {"trades":[{"symbol":"","side":"buy|sell","lots":0,"entryPrice":0,"exitPrice":0,"entryTime":"HH:MM","exitTime":"HH:MM","pnl":0,"commission":0,"swap":0,"ticket":"","sl":0,"tp":0,"notes":""}],"summary":"","warnings":[]} หากไม่พบให้ trades=[] หากชื่อ Asset เป็นพอร์ตเซนต์ (Cent) ที่ลงท้ายด้วย c ให้คงตัว c พิมพ์เล็กไว้เสมอ เช่น XAUUSDc'} ,{type:'image',source:{type:'base64',media_type:blob.type||'image/png',data:b64}}]}]})});
-   if(!r.ok)throw new Error('Claude API '+r.status);const j=await r.json();result=j.content?.map(x=>x.text||'').join('')||'';
-  }else{
-   const model=state.settings.geminiModel||'gemini-3.5-flash-lite';
-   const endpoint=`[https://generativelanguage.googleapis.com/v1beta/models/$](https://generativelanguage.googleapis.com/v1beta/models/$){encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`;let r,j,lastErr='';
-   for(let attempt=0;attempt<3;attempt++){r=await fetch(endpoint,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({contents:[{parts:[{text:'อ่านรายการเทรดจากภาพ MT5 และตอบเป็น JSON เท่านั้น (ห้ามมี ```json คร่อม) รูปแบบ {"trades":[{"symbol":"","side":"buy|sell","lots":0,"entryPrice":0,"exitPrice":0,"entryTime":"HH:MM","exitTime":"HH:MM","pnl":0,"commission":0,"swap":0,"ticket":"","sl":0,"tp":0,"setup":"","notes":""}],"summary":"","warnings":[]} หากชื่อ Asset เป็นพอร์ตเซนต์ (Cent) ที่ลงท้ายด้วย c ให้คงตัว c พิมพ์เล็กไว้เสมอ เช่น XAUUSDc'},{inlineData:{mimeType:blob.type||'image/png',data:b64}}]}],generationConfig:{temperature:0,maxOutputTokens:1400}})});if(r.ok){j=await r.json();break}lastErr=await r.text().catch(()=> '');if(r.status!==429||attempt===2)break;await new Promise(x=>setTimeout(x,1500*Math.pow(2,attempt)));}
-   if(!r.ok){if(r.status===429)throw new Error('Gemini API 429: โควตา/Rate limit ของ Project นี้ถูกใช้เกินกำหนด กรุณารอสักครู่ หรือ ตรวจ Usage & Billing ของ Gemini API (โควตาเป็นระดับ Project ไม่ใช่เฉพาะมือถือเครื่องนี้)');throw new Error('Gemini API '+r.status+(lastErr?': '+lastErr.slice(0,180):''));}
-   result=j.candidates?.[0]?.content?.parts?.map(x=>x.text||'').join('')||'';
-  }
-  
-  let cleanJson = result.replace(/```json/gi, '').replace(/```/g, '').trim();
-  const match = cleanJson.match(/\{[\s\S]*\}/);
-  const data = match ? JSON.parse(match[0]) : null;
-  if(!data||!Array.isArray(data.trades))throw new Error('อ่าน JSON จาก AI ไม่สำเร็จ');
-  
-  data.trades.forEach(t=>{
-      t.entryTime=adjustHHMM(t.entryTime,state.settings.timeOffsetMinutes);
-      t.exitTime=adjustHHMM(t.exitTime,state.settings.timeOffsetMinutes);
-  });
 
-  const approved=await selectParsed(data.trades);for(const t0 of approved){const t={...t0};
-  let sym=(t.symbol||'').trim();if(sym.endsWith('c')||sym.endsWith('C'))t.symbol=sym.slice(0,-1).toUpperCase()+'c';else t.symbol=sym.toUpperCase();
-  if(t.setup&&!setupOptions().includes(t.setup)){state.settings.setupOptions=[...setupOptions(),t.setup];await put('settings',{key:'setupOptions',value:state.settings.setupOptions});}state.day.trades.push({...t,id:uid(),createdAt:Date.now(),pnl:num(t.pnl),commission:num(t.commission),swap:num(t.swap),lots:num(t.lots),timeAdjustedMinutes:num(state.settings.timeOffsetMinutes)});}
-  state.day.updatedAt=Date.now();await put('days',state.day);await saveMT5Image(blob);closeModal();toast(`เพิ่ม ${approved.length} ออเดอร์จาก ${engine==='claude'?'Claude':'Gemini'}`,'ok');render();
- }catch(e){$('#aiOut',c).innerHTML=`<span class="neg">เกิดข้อผิดพลาด: ${esc(e.message)}</span>`}
+function parseCSV(text) {
+    let delim = text.includes('\t') ? '\t' : (text.includes(';') ? ';' : ',');
+    let lines = text.split('\n').map(l => l.trim()).filter(l => l);
+    if (!lines.length) return [];
+    let headers = lines[0].split(delim).map(h => h.replace(/^["']|["']$/g, '').toLowerCase().trim());
+    let results = [];
+    for (let i=1; i<lines.length; i++) {
+        let row = lines[i].split(delim);
+        let obj = {};
+        headers.forEach((h, j) => {
+            if(row[j] !== undefined) obj[h] = row[j].replace(/^["']|["']$/g, '').trim();
+        });
+        results.push(obj);
+    }
+    return results;
 }
-async function selectParsed(trades){
- const c=openModal(`<div class="modal-head"><h3>ตรวจสอบรายการจากภาพ</h3><button class="iconbtn" data-x>✕</button></div><div class="table-wrap"><table class="table"><thead><tr><th></th><th>Symbol</th><th>Side</th><th>Lot</th><th>เข้า</th><th>ออก</th><th>P&L</th></tr></thead><tbody>${trades.map((t,i)=>`<tr><td><input type="checkbox" data-p="${i}" checked></td><td>${esc(t.symbol)}</td><td>${esc(t.side)}</td><td>${num(t.lots).toFixed(2)}</td><td>${esc(t.entryTime)}</td><td>${esc(t.exitTime)}</td><td>${num(t.pnl).toFixed(2)}</td></tr>`).join('')}</tbody></table></div><div class="modal-foot"><button class="btn" data-x>ยกเลิก</button><button class="btn primary" id="okParsed">เพิ่มรายการที่เลือก</button></div>`);
- $$('[data-x]',c).forEach(b=>b.onclick=()=>{closeModal();closeModal()});return new Promise(resolve=>{$('#okParsed',c).onclick=()=>{const out=trades.filter((_,i)=>$(`[data-p="${i}"]`,c).checked);closeModal();resolve(out)}})
+
+function mapDataToTrades(data) {
+    return data.map(r => {
+        const findKey = (...names) => {
+            let k = Object.keys(r).find(key => names.some(n => key.toLowerCase().includes(n)));
+            return k ? r[k] : undefined;
+        };
+        let t_ticket = findKey('ticket', 'order', 'deal');
+        let t_symbol = findKey('symbol', 'item', 'asset');
+        let t_type = findKey('type', 'side', 'action');
+        let t_lots = findKey('lots', 'volume', 'size');
+        let t_openPrice = findKey('opening_price', 'open_price', 'price', 'entry');
+        let t_closePrice = findKey('closing_price', 'close_price', 'exit');
+        let t_openTime = findKey('opening_time_utc', 'open_time', 'time');
+        let t_closeTime = findKey('closing_time_utc', 'close_time');
+        let t_sl = findKey('stop_loss', 's/l', 'sl');
+        let t_tp = findKey('take_profit', 't/p', 'tp');
+        let t_profit = findKey('profit', 'pnl', 'net');
+        let t_com = findKey('commission', 'comm');
+        let t_swap = findKey('swap');
+        
+        let side = 'buy';
+        if(String(t_type).toLowerCase().includes('sell')) side = 'sell';
+        
+        return {
+            ticket: String(t_ticket || ''),
+            symbol: String(t_symbol || ''),
+            side: side,
+            lots: Number(t_lots) || 0,
+            entryPrice: Number(t_openPrice) || 0,
+            exitPrice: Number(t_closePrice) || 0,
+            entryTime: String(t_openTime || ''),
+            exitTime: String(t_closeTime || ''),
+            sl: Number(t_sl) || 0,
+            tp: Number(t_tp) || 0,
+            pnl: Number(t_profit) || 0,
+            commission: Number(t_com) || 0,
+            swap: Number(t_swap) || 0
+        };
+    }).filter(t => t.symbol && t.lots > 0);
+}
+
+function adjustTimeAndDate(baseDateStr, timeStr, offsetMinutes) {
+   if (!timeStr) return { date: baseDateStr, time: '' };
+   let date = baseDateStr;
+   let hh = 0, mm = 0;
+   
+   if (timeStr.includes('T')) {
+       const p = timeStr.split('T');
+       date = p[0];
+       const tStr = p[1].split(':');
+       hh = parseInt(tStr[0], 10) || 0;
+       mm = parseInt(tStr[1], 10) || 0;
+   } else if (timeStr.includes(' ')) {
+       const p = timeStr.split(' ');
+       if (p[0].includes('-') || p[0].includes('/')) {
+           date = p[0].replace(/\//g, '-');
+           if(date.split('-')[0].length === 2) {
+               let pts = date.split('-');
+               date = `${pts[2]}-${pts[1]}-${pts[0]}`;
+           }
+       }
+       const tStr = (p[1]||'').split(':');
+       hh = parseInt(tStr[0], 10) || 0;
+       mm = parseInt(tStr[1], 10) || 0;
+   } else {
+       const tMatch = String(timeStr).match(/(\d{1,2}):(\d{2})/);
+       if(tMatch) {
+           hh = parseInt(tMatch[1], 10);
+           mm = parseInt(tMatch[2], 10);
+       } else {
+           return { date: baseDateStr, time: timeStr };
+       }
+   }
+   
+   let totalMins = hh * 60 + mm + Number(offsetMinutes || 0);
+   let dayOffset = Math.floor(totalMins / 1440);
+   let newMins = ((totalMins % 1440) + 1440) % 1440;
+   
+   let outDate = date;
+   if (dayOffset !== 0) {
+       let d = parseDate(date);
+       if (!isNaN(d.getTime())) {
+           d.setDate(d.getDate() + dayOffset);
+           outDate = fmtDate(d);
+       }
+   }
+   
+   return {
+       date: outDate,
+       time: `${String(Math.floor(newMins/60)).padStart(2,'0')}:${String(newMins%60).padStart(2,'0')}`
+   };
+}
+
+async function mt5Modal(){
+ const c=openModal(`<div class="modal-head"><h3>📥 นำเข้าออเดอร์</h3><button class="iconbtn" data-x>✕</button></div>
+ <div class="stack">
+ <div class="notice">เลือกรูปภาพหลายรูป หรือไฟล์ .csv / .xlsx<br>ระบบจะปรับเวลาที่ดึงมาให้อัตโนมัติ (ปัจจุบัน: ตั้งชดเชยไว้ <b>${state.settings.timeOffsetMinutes||0} นาที</b>) สามารถแก้ได้ที่หน้าตั้งค่า</div>
+ <div class="row">
+ <button class="btn primary" id="pickMT5">📁 เลือกไฟล์ / ภาพ</button>
+ <button class="btn" id="cameraMT5">📷 ถ่ายภาพ</button>
+ </div>
+ <div id="fileStatus" class="small muted" style="min-height:20px">ยังไม่ได้เลือกไฟล์</div>
+ <div class="row" id="actionRow" style="display:none; gap:8px;">
+ <button class="btn" id="parseLocalFile" style="display:none">📄 ดึงข้อมูลไฟล์ (ไม่ต้องใช้เน็ต)</button>
+ <button class="btn primary" id="aiGemini" style="display:none">วิเคราะห์รูปด้วย Gemini</button>
+ <button class="btn" id="aiClaude" style="display:none">วิเคราะห์รูปด้วย Claude</button>
+ </div>
+ <div id="aiOut" class="muted small"></div>
+ </div>`);
+ $$('[data-x]',c).forEach(b=>b.onclick=closeModal);
+ 
+ let selectedImages = [];
+ let selectedDataFiles = [];
+
+ function updateFileUI() {
+     let txt = [];
+     if(selectedImages.length) txt.push(`🖼️ รูป ${selectedImages.length} ไฟล์`);
+     if(selectedDataFiles.length) txt.push(`📄 ไฟล์ ${selectedDataFiles.length} ไฟล์`);
+     $('#fileStatus', c).innerHTML = txt.join(' + ') || 'ยังไม่ได้เลือกไฟล์';
+     $('#actionRow', c).style.display = (selectedImages.length || selectedDataFiles.length) ? 'flex' : 'none';
+     $('#parseLocalFile', c).style.display = (selectedDataFiles.length && !selectedImages.length) ? 'block' : 'none';
+     $('#aiGemini', c).style.display = selectedImages.length ? 'block' : 'none';
+     $('#aiClaude', c).style.display = selectedImages.length ? 'block' : 'none';
+ }
+
+ $('#pickMT5',c).onclick=()=>{
+     const i=document.createElement('input');
+     i.type='file';
+     i.accept='image/*,.csv,.xlsx,.xls';
+     i.multiple=true;
+     i.onchange=()=>{
+         const files = Array.from(i.files);
+         selectedImages = files.filter(f => f.type.startsWith('image/'));
+         selectedDataFiles = files.filter(f => f.name.match(/\.(csv|xlsx|xls)$/i));
+         updateFileUI();
+     };
+     i.click();
+ };
+ $('#cameraMT5',c).onclick=()=>{
+     const i=document.createElement('input');
+     i.type='file';
+     i.accept='image/*';
+     i.capture='environment';
+     i.onchange=()=>{
+         selectedImages.push(i.files[0]);
+         updateFileUI();
+     };
+     i.click();
+ };
+ c._onPaste=b=>{
+     if(b.type.startsWith('image/')) {
+         selectedImages.push(b);
+         updateFileUI();
+     }
+ };
+ 
+ $('#parseLocalFile', c).onclick=async ()=>await aiParse(c, selectedImages, 'local', selectedDataFiles);
+ $('#aiGemini', c).onclick=async ()=>await aiParse(c, selectedImages, 'gemini', selectedDataFiles);
+ $('#aiClaude', c).onclick=async ()=>await aiParse(c, selectedImages, 'claude', selectedDataFiles);
+}
+
+async function aiParse(c, images, engine, dataFiles = []) {
+  if (images.length === 0 && dataFiles.length === 0) return toast('ยังไม่ได้เลือกไฟล์', 'err');
+  const key = state.settings[engine + 'Key'];
+  if (images.length > 0 && engine !== 'local' && !key) {
+      toast(`ยังไม่ได้ใส่ API key ของ ${engine} ในหน้าตั้งค่า`, 'err');
+      return;
+  }
+
+  $('#aiOut', c).innerHTML = 'กำลังอ่านและประมวลผล...';
+  try {
+      let allTrades = [];
+
+      // ประมวลผล Local CSV / Excel
+      for (let file of dataFiles) {
+          let data = [];
+          if (file.name.match(/\.(xlsx|xls)$/i)) {
+              if (typeof XLSX === 'undefined') throw new Error('ไม่พบไลบรารี SheetJS โปรดเชื่อมต่ออินเทอร์เน็ตเพื่ออ่านไฟล์ Excel');
+              let buffer = await file.arrayBuffer();
+              let wb = XLSX.read(buffer, { type: 'array' });
+              data = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+          } else {
+              let text = await file.text();
+              data = parseCSV(text);
+          }
+          allTrades.push(...mapDataToTrades(data));
+      }
+
+      // ประมวลผล รูปภาพ ด้วย AI
+      if (images.length > 0 && engine !== 'local') {
+          const b64Parts = await Promise.all(images.map(async img => {
+              const b = await blob64(img);
+              return { b64: b, type: img.type || 'image/png' };
+          }));
+          
+          let result = '';
+          const promptText = `อ่านรายการออเดอร์เทรด (MT5/MT4) จากทุกภาพที่แนบมา แปลงเป็น JSON Array เท่านั้น โดยห้ามมีข้อความอื่น
+แต่ละออเดอร์ให้มี field ดังนี้ (ถ้าไม่มีให้เว้นว่างหรือ 0):
+- symbol (String) เช่น XAUUSD, EURUSD
+- side (String) "buy" หรือ "sell"
+- lots (Number)
+- entryPrice (Number)
+- exitPrice (Number)
+- entryTime (String) "HH:MM"
+- exitTime (String) "HH:MM"
+- pnl (Number)
+- swap (Number)
+- commission (Number)
+- ticket (String)`;
+
+          if (engine === 'claude') {
+              const model = state.settings.claudeModel || 'claude-3-5-sonnet-20241022';
+              const contentParts = [{ type: 'text', text: promptText }];
+              b64Parts.forEach(p => {
+                  contentParts.push({ type: 'image', source: { type: 'base64', media_type: p.type, data: p.b64 } });
+              });
+
+              const r = await fetch('https://api.anthropic.com/v1/messages', {
+                  method: 'POST',
+                  headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'content-type': 'application/json', 'anthropic-dangerously-allow-browser': 'true' },
+                  body: JSON.stringify({
+                      model, max_tokens: 3000,
+                      messages: [{ role: 'user', content: contentParts }]
+                  })
+              });
+              if (!r.ok) throw new Error(`Claude API Error: ${r.status}`);
+              const d = await r.json(); result = d.content[0].text;
+          } else {
+              const model = state.settings.geminiModel || 'gemini-2.0-flash';
+              const contentParts = [{ text: promptText }];
+              b64Parts.forEach(p => {
+                  contentParts.push({ inlineData: { mimeType: p.type, data: p.b64 } });
+              });
+              
+              // แก้ไข URL ป้องกัน Markdown injection ทำให้ไม่ติด 405 error
+              const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`;
+              const r = await fetch(endpoint, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                      contents: [{ parts: contentParts }],
+                      generationConfig: { responseMimeType: 'application/json' }
+                  })
+              });
+              if (!r.ok) throw new Error(`Gemini API Error: ${r.status}`);
+              const d = await r.json();
+              result = d.candidates[0].content.parts[0].text;
+          }
+
+          const m = result.match(/\[[\s\S]*\]/);
+          const parsedAi = m ? JSON.parse(m[0]) : JSON.parse(result);
+          if (Array.isArray(parsedAi)) allTrades.push(...parsedAi);
+      }
+
+      if (allTrades.length === 0) throw new Error('ไม่พบข้อมูลออเดอร์จากไฟล์หรือรูปภาพเลย');
+
+      $('#aiOut', c).innerHTML = '';
+      launchReviewModal(allTrades, images, c);
+  } catch (e) {
+      $('#aiOut', c).innerHTML = `<div class="neg" style="margin-top:10px">เกิดข้อผิดพลาด: ${esc(e.message)}</div>`;
+  }
+}
+
+async function launchReviewModal(trades, images, parentModal) {
+    if(parentModal) closeModal();
+    
+    // คำนวณและปรับชดเชยเวลา Time Offset ตามที่ตั้งค่าไว้
+    trades.forEach(t => {
+        let en = adjustTimeAndDate(state.date, t.entryTime, state.settings.timeOffsetMinutes);
+        t.entryDate = en.date;
+        t.entryTime = en.time;
+        
+        let ex = adjustTimeAndDate(t.entryDate, t.exitTime, state.settings.timeOffsetMinutes);
+        t.exitDate = ex.date;
+        t.exitTime = ex.time;
+    });
+
+    const c=openModal(`<div class="modal-head"><h3>🔍 ตรวจสอบข้อมูลออเดอร์ (${trades.length} รายการ)</h3><button class="iconbtn" data-x>✕</button></div>
+    <div class="notice" style="margin-bottom:12px">ตรวจสอบข้อมูลก่อนบันทึก (เวลาได้ถูกปรับชดเชย <b>${state.settings.timeOffsetMinutes||0} นาที</b> ให้เข้ากับเวลาพื้นที่คุณเรียบร้อยแล้ว)</div>
+    <div class="table-wrap" style="max-height:55vh;overflow:auto"><table class="table"><thead><tr><th><input type="checkbox" id="chkAll" checked></th><th>วันที่</th><th>คู่เงิน</th><th>ฝั่ง</th><th>Lot</th><th>เข้า</th><th>ออก</th><th>เวลาเข้า</th><th>เวลาออก</th><th>P&L</th></tr></thead><tbody id="parsedList">
+    ${trades.map((t,i)=>`<tr data-idx="${i}"><td><input type="checkbox" class="chk-row" checked></td><td>${esc(t.entryDate)}</td><td><b>${esc(t.symbol)}</b></td><td>${esc(t.side)}</td><td>${t.lots}</td><td>${t.entryPrice}</td><td>${t.exitPrice}</td><td>${esc(t.entryTime)}</td><td>${esc(t.exitTime)}</td><td class="${t.pnl>=0?'pos':'neg'}"><b>${t.pnl}</b></td></tr>`).join('')}
+    </tbody></table></div>
+    <div class="modal-foot"><button class="btn" data-x>ยกเลิก</button><button class="btn primary" id="saveParsed">บันทึกที่เลือก</button></div>`, true);
+
+    $$('[data-x]',c).forEach(b=>b.onclick=closeModal);
+    $('#chkAll',c).onchange=e=>{$$('.chk-row',c).forEach(cb=>cb.checked=e.target.checked)};
+
+    $('#saveParsed',c).onclick=async()=>{         const rows=$$('#parsedList tr');
+        let count = 0;
+        for(let i=0;i<rows.length;i++){
+            if($('.chk-row',rows[i]).checked){
+                const t0 = trades[rows[i].dataset.idx];
+                const t = {...t0};
+                let sym=(t.symbol||'').trim();
+                if(sym.endsWith('c')||sym.endsWith('C')) t.symbol=sym.slice(0,-1).toUpperCase()+'c';
+                else t.symbol=sym.toUpperCase();
+                
+                let targetDate = t.entryDate || state.date;
+                let targetDay = targetDate === state.date ? state.day : await getDay(targetDate);
+                
+                delete t.entryDate; delete t.exitDate;
+
+                targetDay.trades.push({
+                    ...t,
+                    id: uid(),
+                    createdAt: Date.now(),
+                    pnl: num(t.pnl),
+                    commission: num(t.commission),
+                    swap: num(t.swap),
+                    lots: num(t.lots),
+                    timeAdjustedMinutes: num(state.settings.timeOffsetMinutes)
+                });
+                targetDay.updatedAt = Date.now();
+                await put('days', targetDay);
+                count++;
+            }
+        }
+        
+        state.day = await getDay(state.date);
+        
+        for (let img of images) {
+            await saveMT5Image(img);
+        }
+        
+        closeModal();
+        toast(`เพิ่ม ${count} ออเดอร์สำเร็จ`, 'ok');
+        render();
+    };
+}
+
+async function saveScalarSetting(key,value){
+  state.settings[key]=value;
+  await put('settings',{key,value});
+}
+
+async function settings(app){
+ const s = state.settings;
+ app.innerHTML = `<div class="stack">
+ <div class="top"><h1>⚙️ ตั้งค่า</h1></div>
+ <section class="card"><div class="card-head"><h2>ทั่วไป</h2></div>
+ <div class="formgrid">
+  <label class="field"><span>สกุลเงินหลัก</span><input id="setCur" value="${esc(s.currency)}"></label>
+  <label class="field"><span>ธีม</span><select id="setTheme"><option value="dark" ${s.theme==='dark'?'selected':''}>Dark</option><option value="light" ${s.theme==='light'?'selected':''}>Light</option></select></label>
+  <label class="field full"><span>ปรับเวลาออเดอร์อัตโนมัติ (Time Offset) เป็นนาที</span><input type="number" id="setTimeOffset" value="${esc(s.timeOffsetMinutes||0)}" placeholder="เช่น 420 สำหรับ +7 ชม."><span class="small muted">เมื่อดึงข้อมูลจาก MT5 (ไฟล์/รูปภาพ) ระบบจะนำไปบวกเพิ่มเพื่อให้ตรงกับเวลา Local ของคุณ (เช่น 420 = +7 ชั่วโมง)</span></label>
+ </div>
+ </section>
+ <section class="card"><div class="card-head"><h2>ตั้งค่า AI สำหรับสกัดรูปออเดอร์</h2></div>
+ <div class="formgrid">
+  <label class="field"><span>Gemini API Key</span><input id="setGeminiKey" type="password" value="${esc(s.geminiKey||'')}"></label>
+  <label class="field"><span>Gemini Model</span><input id="setGeminiModel" value="${esc(s.geminiModel||'gemini-2.0-flash')}"></label>
+  <label class="field"><span>Claude API Key</span><input id="setClaudeKey" type="password" value="${esc(s.claudeKey||'')}"></label>
+  <label class="field"><span>Claude Model</span><input id="setClaudeModel" value="${esc(s.claudeModel||'claude-3-5-sonnet-20241022')}"></label>
+ </div>
+ </section>
+ <section class="card"><div class="card-head"><h2>จัดการแผน / Setup</h2></div>
+ <div><button class="btn" id="manageSetupBtn">🧩 แก้ไข Setup Options</button></div>
+ </section>
+ </div>`;
+
+ $('#setCur').oninput=e=>saveScalarSetting('currency', e.target.value);
+ $('#setTimeOffset').oninput=e=>saveScalarSetting('timeOffsetMinutes', Number(e.target.value));
+ $('#setTheme').onchange=e=>{ saveScalarSetting('theme', e.target.value); document.documentElement.dataset.theme=e.target.value; };
+ $('#setGeminiKey').oninput=e=>saveScalarSetting('geminiKey', e.target.value);
+ $('#setGeminiModel').oninput=e=>saveScalarSetting('geminiModel', e.target.value);
+ $('#setClaudeKey').oninput=e=>saveScalarSetting('claudeKey', e.target.value);
+ $('#setClaudeModel').oninput=e=>saveScalarSetting('claudeModel', e.target.value);
+ $('#manageSetupBtn').onclick=()=>setupManager();
 }
 
 async function dashboard(app){
- const r=range(state.period,state.anchor);
- let rawTs=tradesInRange(state.days,r.start,r.end);
- let ts=[];
- let cur=state.settings.currency||'';
- let hasStd=rawTs.some(t=>!isCent(t));
- let hasCent=rawTs.some(t=>isCent(t));
-
- if(state.portFilter==='std'){
-  ts=rawTs.filter(t=>!isCent(t));
- }else if(state.portFilter==='cent'){
-  ts=rawTs.filter(t=>isCent(t));
-  cur+='c';
- }else{
-  if(hasStd&&hasCent){
-   ts=rawTs.map(t=>{if(isCent(t))return{...t,pnl:num(t.pnl)/100,commission:num(t.commission)/100,swap:num(t.swap)/100};return t;});
-   cur+=' (แปลงรวม)';
-  }else{
-   ts=rawTs;
-   if(hasCent)cur+='c';
-  }
- }
- const m=metrics(ts);
-
- const eq=[];let cum=0;ts.forEach(t=>{cum+=tradeNet(t);eq.push({date:t.date,cum,net:tradeNet(t)})});
- let bars=[];
- if(state.period==='day')bars=ts.map(t=>({label:t.symbol,value:tradeNet(t)}));
- else if(state.period==='year'){const g=group(ts,t=>t.date.slice(0,7),k=>THM[Number(k.slice(5))-1]);bars=Array.from({length:12},(_,i)=>{const k=`${parseDate(state.anchor).getFullYear()}-${String(i+1).padStart(2,'0')}`,x=g.find(z=>z.label===THM[i]);return {label:THM[i],value:x?x.m.net:0}})}
- else if(state.period==='all'){bars=group(ts,t=>t.date.slice(0,7),k=>k.slice(2)).map(g=>({label:g.label,value:g.m.net}))}
- else {for(let d=new Date(r.start);d<=r.end;d=addDays(d,1)){const k=fmtDate(d),v=ts.filter(t=>t.date===k).reduce((a,t)=>a+tradeNet(t),0);bars.push({label:thDate(k,true),value:v})}}
- const dayMap=new Map();state.days.forEach(d=>{
-  let dayTs=d.trades;
-  if(state.portFilter==='std')dayTs=d.trades.filter(t=>!isCent(t));
-  if(state.portFilter==='cent')dayTs=d.trades.filter(t=>isCent(t));
-  let dNet=0; dayTs.forEach(t=>{dNet+=isCent(t)&&state.portFilter==='all'?tradeNet(t)/100:tradeNet(t)});
-  dayMap.set(d.date,{net:dNet,count:dayTs.length,hasNote:!!(d.plan?.setup||d.review?.notes)})
- });
- const bySymbol=group(ts,t=>t.symbol,k=>k),bySide=group(ts,t=>t.side,k=>k==='buy'?'Buy':'Sell'),byDow=group(ts,t=>parseDate(t.date).getDay(),k=>THD[Number(k)]);
- const sub=state.period==='year'?group(ts,t=>t.date.slice(0,7),k=>THMF[Number(k.slice(5))-1]):state.period==='month'?group(ts,t=>isoWeek(parseDate(t.date)),k=>`สัปดาห์ ${k}`):state.period==='all'?group(ts,t=>t.date.slice(0,4),k=>`ปี ${k}`):group(ts,t=>t.date,k=>thDate(k));
+ const period=state.period, anchor=state.anchor;
+ const r=range(period,anchor);
+ const trs=tradesInRange(state.days,r.start,r.end);
+ const std=trs.filter(t=>!isCent(t)), cent=trs.filter(t=>isCent(t));
  
- let tableTs = rawTs;
- if(state.portFilter==='std') tableTs=rawTs.filter(t=>!isCent(t));
- if(state.portFilter==='cent') tableTs=rawTs.filter(t=>isCent(t));
-
  app.innerHTML=`<div class="stack">
- <div class="top"><h1>📊 สรุปผล</h1><div class="top-actions"><button class="btn" id="exportTop">⬇ สำรอง</button><button class="btn" id="importTop">⬆ นำเข้า</button></div></div>
- <div class="periodbar"><div class="seg">${[['day','วัน'],['week','สัปดาห์'],['month','เดือน'],['year','ปี'],['all','ทั้งหมด']].map(([p,l])=>`<button class="${state.period===p?'on':''}" data-period="${p}">${l}</button>`).join('')}</div><div class="periodnav ${state.period==='all'?'hide':''}"><button class="iconbtn" id="shiftL">‹</button><span class="lbl">${esc(state.period==='day'?thDate(state.anchor):r.label)}</span><button class="iconbtn" id="shiftR">›</button><button class="btn small" id="dashToday">วันนี้</button></div><div class="seg" style="margin-left:auto;background:var(--card2)"><button class="${state.portFilter==='all'?'on':''}" data-portf="all">รวมทุกพอร์ต</button><button class="${state.portFilter==='std'?'on':''}" data-portf="std">Standard</button><button class="${state.portFilter==='cent'?'on':''}" data-portf="cent">Cent</button></div></div>
- <div class="tiles"><div class="tile hero">${donut(m.winrate)}<div><span class="l">กำไร/ขาดทุนสุทธิ${cur?` (${esc(cur)})`:''}</span><span class="v ${m.net>=0?'pos':'neg'}">${signed(m.net,cur)}</span><span class="s">${m.total} ออเดอร์ · ${m.wins} ชนะ · ${m.losses} แพ้${m.be?` · ${m.be} เท่าทุน`:''}</span></div></div>
- <div class="tile"><span class="l">Profit factor</span><span class="v">${Number.isFinite(m.profitFactor)?m.profitFactor.toFixed(2):'∞'}</span><span class="s">กำไรรวม ÷ ขาดทุนรวม</span></div>
- <div class="tile"><span class="l">Expectancy</span><span class="v ${m.expectancy>=0?'pos':'neg'}">${signed(m.expectancy,cur)}</span><span class="s">กำไรเฉลี่ยต่อไม้</span></div>
- <div class="tile"><span class="l">R:R เฉลี่ย</span><span class="v">${Number.isFinite(m.rr)?m.rr.toFixed(2):'∞'}</span><span class="s">ชนะเฉลี่ย ${money(m.avgWin,cur)} / แพ้เฉลี่ย ${money(m.avgLoss,cur)}</span></div>
- <div class="tile"><span class="l">Max drawdown</span><span class="v neg">${money(m.maxDD,cur)}</span><span class="s">จากจุดสูงสุดของกำไรสะสม</span></div>
- <div class="tile"><span class="l">ไม้ดีสุด</span><span class="v pos">${signed(m.best,cur)}</span></div><div class="tile"><span class="l">ไม้แย่สุด</span><span class="v neg">${signed(m.worst,cur)}</span></div>
- <div class="tile"><span class="l">ชนะติดกันสูงสุด</span><span class="v">${m.maxWinStreak}</span><span class="s">แพ้ติดกัน ${m.maxLossStreak}</span></div><div class="tile"><span class="l">รวม lot</span><span class="v">${m.lots.toFixed(2)}</span><span class="s">Gross +${money(m.grossWin,cur)} / -${money(m.grossLoss,cur)}</span></div></div>
- <section class="card"><div class="card-head"><h2>📈 กำไรสะสม</h2><span class="small muted">${eq.length} ออเดอร์</span></div><div class="chartbox">${drawLine(eq)}</div></section>
- <section class="card"><div class="card-head"><h2>📊 กำไร/ขาดทุน ${state.period==='day'?'ทีละออเดอร์':state.period==='year'?'รายเดือน':'รายวัน'}</h2></div><div class="chartbox">${drawBars(bars)}</div></section>
- ${state.period==='month'?`<section class="card"><div class="card-head"><h2>🗓️ ปฏิทิน</h2><span class="small muted">แตะวันเพื่อเปิดไดอารี่</span></div><div class="cal">${calHtml(parseDate(state.anchor).getFullYear(),parseDate(state.anchor).getMonth(),dayMap)}</div></section>`:''}${(()=>{const z=setupAnalytics(ts);return `<div class="grid2">${setupStatsTable('🏆 ผลงานแยกตาม Setup',z.setup,cur)}${setupStatsTable('🎯 Asset × Setup',z.matrix,cur)}</div>`})()}
- <div class="grid2">${groupTable('ตามช่วงเวลา',sub,cur)}${groupTable('ตามคู่เงิน',bySymbol,cur)}${groupTable('ตาม Buy / Sell',bySide,cur)}${groupTable('ตามวันในสัปดาห์',byDow,cur)}</div>
- <section class="card"><div class="card-head"><h2>📜 รายการออเดอร์</h2><span class="small muted">${tableTs.length} รายการ</span></div>${tableTs.length?`<div class="table-wrap"><table class="table"><thead><tr><th>วันที่</th><th>คู่เงิน</th><th>ฝั่ง</th><th>Lot</th><th>เข้า</th><th>ออก</th><th>กำไร</th></tr></thead><tbody>${[...tableTs].reverse().map(t=>`<tr class="clickable" data-open="${t.date}"><td class="muted">${t.date}</td><td><b>${esc(t.symbol)}</b></td><td>${esc(t.side)}</td><td>${num(t.lots).toFixed(2)}</td><td>${num(t.entryPrice)}</td><td>${num(t.exitPrice)}</td><td class="${tradeNet(t)>=0?'pos':'neg'}"><b>${signed(tradeNet(t),isCent(t)?state.settings.currency+'c':state.settings.currency)}</b></td></tr>`).join('')}</tbody></table></div>`:'<div class="muted">ไม่มีออเดอร์ในช่วงนี้</div>'}</section></div>`;
- $$('[data-period]').forEach(b=>b.onclick=()=>{state.period=b.dataset.period;render()});$('#shiftL').onclick=()=>{state.anchor=shift(state.period,state.anchor,-1);render()};$('#shiftR').onclick=()=>{state.anchor=shift(state.period,state.anchor,1);render()};$('#dashToday').onclick=()=>{state.anchor=today();render()};$$('[data-cal]').forEach(b=>b.onclick=()=>href('diary',b.dataset.cal));$$('[data-open]').forEach(b=>b.onclick=()=>href('diary',b.dataset.open));$('#exportTop').onclick=exportBackup;$('#importTop').onclick=importBackup;  $$('[data-portf]').forEach(b=>b.onclick=()=>{state.portFilter=b.dataset.portf;render()});
+ <div class="top"><h1>📊 สรุปผล</h1></div>
+ <div class="periodbar">
+  <div class="seg"><button class="${period==='day'?'on':''}" data-p="day">วัน</button><button class="${period==='week'?'on':''}" data-p="week">สัปดาห์</button><button class="${period==='month'?'on':''}" data-p="month">เดือน</button><button class="${period==='year'?'on':''}" data-p="year">ปี</button><button class="${period==='all'?'on':''}" data-p="all">ทั้งหมด</button></div>
+  <div class="periodnav"><button class="iconbtn" data-s="-1">‹</button><div class="lbl">${esc(r.label)}</div><button class="iconbtn" data-s="1">›</button></div>
+ </div>
+ <h2>พอร์ต Standard</h2>
+ ${renderDashPort(std, state.settings.currency)}
+ <h2>พอร์ต Cent</h2>
+ ${renderDashPort(cent, state.settings.currency+'c')}
+ </div>`;
+ 
+ $$('[data-p]').forEach(b=>b.onclick=()=>{state.period=b.dataset.p;render()});$$
+('[data-s]').forEach(b=>b.onclick=()=>{state.anchor=shift(state.period,state.anchor,Number(b.dataset.s));render()});
 }
-async function settings(app){
- const s=state.settings;
- app.innerHTML=`<div class="stack"><div class="top"><h1>⚙️ ตั้งค่า</h1><div class="top-actions"><button class="btn" id="exportSet">⬇ สำรองข้อมูล</button><button class="btn" id="importSet">⬆ นำเข้า</button></div></div>
- <section class="card"><div class="card-head"><h2>ทั่วไป</h2></div><div class="formgrid"><label class="field"><span>ธีม</span><select id="theme"><option value="dark" ${s.theme==='dark'?'selected':''}>🌙 กลางคืน</option><option value="light" ${s.theme==='light'?'selected':''}>☀️ กลางวัน</option></select></label><label class="field"><span>สกุลเงินบัญชี</span><input id="currency" value="${esc(s.currency||'USD')}" placeholder="USD / THB"></label><label class="field"><span>ยอดเริ่มต้นบัญชี (ไว้ดูภาพรวม)</span><input id="startingBalance" type="number" step="any" value="${esc(s.startingBalance||'')}"></label><label class="field"><span>ชื่อโฟลเดอร์ Drive</span><input id="driveFolderName" value="${esc(s.driveFolderName||'Trade Memo')}"></label><label class="field"><span>ปรับเวลาจาก MT5 → เวลาไทย (ชั่วโมง)</span><input id="timeOffsetHours" type="number" step="0.5" value="${(num(s.timeOffsetMinutes||420)/60).toString()}" placeholder="เช่น 7 หรือ -2.5"></label></div><div class="small muted" style="margin-top:8px">เช่น 10:30 ในภาพ +7 hrs → 17:30 ใน Journal</div></section>
- <section class="card"><div class="card-head"><h2>🧩 แผนเข้าเทรด / Setup</h2><button class="btn small" id="manageSetups">จัดการ</button></div><div class="small muted" style="line-height:1.7">รายการเริ่มต้น: QM, Double Top, Double Bottom, M Pattern, W Pattern, Liquidity Sweep, BOS / CHoCH และเพิ่มแผนของคุณเองได้</div></section>
- <section class="card"><div class="card-head"><h2>☁️ Google Drive</h2><span class="small muted">${s.lastSync?`ซิงค์ล่าสุด ${new Date(s.lastSync).toLocaleString('th-TH')}`:'ยังไม่เคยซิงค์'}</span></div><div class="stack"><label class="field"><span>OAuth Client ID</span><input id="driveClientId" value="${esc(s.driveClientId||'')}" placeholder="xxxx.apps.googleusercontent.com"></label><div class="row"><button class="btn primary" id="syncNow">☁️ ซิงค์เดี๋ยวนี้</button><button class="btn" id="driveOut">ออกจาก Google</button></div><details><summary>วิธีตั้งค่า Google Drive</summary><div class="small muted" style="margin-top:8px;line-height:1.7">สร้างโปรเจกต์ใน Google Cloud Console → เปิด Google Drive API → OAuth consent screen → เพิ่มบัญชีของคุณเป็น Test user → สร้าง OAuth Client ID แบบ Web application → ใส่ Authorized JavaScript origins เป็น <code>${esc(location.origin)}</code> → นำ Client ID มาวางตรงนี้ สิทธิ์ที่แอปขอคือ <code>drive.file</code></div></details></div></section>
- <section class="card"><div class="card-head"><h2>🤖 อ่านภาพ MT5 ด้วย AI</h2></div><div class="formgrid"><label class="field full"><span>Claude API key</span><input id="claudeKey" type="password" value="${esc(s.claudeKey||'')}" placeholder="sk-ant-…" autocomplete="off"></label><label class="field"><span>Claude model</span><input id="claudeModel" value="${esc(s.claudeModel||'claude-3-5-sonnet-latest')}"></label><label class="field full"><span>Gemini API key</span><input id="geminiKey" type="password" value="${esc(s.geminiKey||'')}" placeholder="AIza…" autocomplete="off"></label><label class="field"><span>Gemini model</span><input id="geminiModel" value="${esc(s.geminiModel||'gemini-3.5-flash-lite')}"></label></div><div class="notice" style="margin-top:12px">API keys เก็บใน browser เครื่องนี้เท่านั้น ตัว key จะถูกส่งออกเฉพาะเมื่อคุณกดใช้ AI ไปยัง Anthropic หรือ Google ตามบริการที่เลือก</div></section>
- <section class="card"><div class="card-head"><h2>🔒 ความเป็นส่วนตัว</h2></div><div class="small muted" style="line-height:1.7">โหมดปกติ: IndexedDB ใน browser • ไม่มี Analytics • ไม่มี database ของผู้พัฒนา • Backup เป็นไฟล์ JSON ของคุณเอง • Google Drive และ AI เป็นการเชื่อมต่อเสริมที่คุณเปิดใช้เอง • อย่าเก็บ MT5 password, broker password, API secret, private key หรือ seed phrase ในแอป</div></section></div>`;
- $('#theme').onchange=e=>{s.theme=e.target.value;document.documentElement.dataset.theme=s.theme;put('settings',{key:'theme',value:s.theme})};
- [['currency','currency'],['startingBalance','startingBalance'],['driveClientId','driveClientId'],['driveFolderName','driveFolderName'],['claudeKey','claudeKey'],['claudeModel','claudeModel'],['geminiKey','geminiKey'],['geminiModel','geminiModel'],['timeOffsetHours','timeOffsetHours']].forEach(([id,k])=>{$('#'+id).addEventListener('change',async e=>{s[k]=id==='startingBalance'?num(e.target.value):id==='timeOffsetHours'?Math.round(num(e.target.value)*60):e.target.value;await put('settings',{key:k,value:s[k]})})});
- $('#exportSet').onclick=exportBackup;$('#importSet').onclick=importBackup;$('#syncNow').onclick=driveSync;$('#driveOut').onclick=driveSignOut;$('#manageSetups').onclick=setupManager;
+
+function renderDashPort(trades, cur) {
+ if(!trades.length) return '<div class="muted card" style="padding: 20px; text-align: center;">ไม่มีข้อมูลออเดอร์ในช่วงเวลานี้</div>';
+ const m=metrics(trades);
+ let cum=0; const curve=[{date:'Start',cum:0}, ...trades.map(t=>{cum+=tradeNet(t);return {date:t.date.slice(5),cum}})];
+ 
+ const tiles = `<div class="tiles">
+ <div class="tile"><span class="l">Net P&L</span><span class="v ${m.net>=0?'pos':'neg'}">${signed(m.net,cur)}</span></div>
+ <div class="tile"><span class="l">Winrate</span><span class="v">${(m.winrate*100).toFixed(1)}%</span></div>
+ <div class="tile"><span class="l">Profit Factor</span><span class="v">${Number.isFinite(m.profitFactor)?m.profitFactor.toFixed(2):'∞'}</span></div>
+ <div class="tile"><span class="l">Max Drawdown</span><span class="v neg">${money(m.maxDD,cur)}</span></div>
+ </div>`;
+ 
+ const an = setupAnalytics(trades);
+ 
+ return `<div class="stack">
+ ${tiles}
+ <section class="card"><div class="card-head"><h3>📈 Equity Curve</h3></div><div class="chartbox">${drawLine(curve)}</div></section>
+ ${groupTable('ผลงานตามสินทรัพย์', an.asset, cur)}
+ ${groupTable('ผลงานตาม Setup', an.setup, cur)}
+ </div>`;
 }
-function exportData(includeImages=true){return Promise.all([all('days'),all('images')]).then(async([days,imgs])=>{const safeSettings={};for(const k of ['currency','startingBalance','theme','driveFolderName','lastSymbol','setupOptions','timeOffsetMinutes','syncRevision'])if(state.settings[k]!==undefined)safeSettings[k]=state.settings[k];const out={version:3,app:'Trade Memo Private',exportedAt:new Date().toISOString(),settings:safeSettings,days,images:imgs.map(i=>({id:i.id,date:i.date,kind:i.kind,name:i.name,type:i.type,createdAt:i.createdAt})),imageData:{}};if(includeImages)for(const i of imgs)out.imageData[i.id]=await blob64(i.blob);return out})}
-async function exportBackup(){try{const data=await exportData(true);const blob=new Blob([JSON.stringify(data)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`trade-memo-backup-${today()}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),4000);toast('ดาวน์โหลดไฟล์สำรองแล้ว','ok')}catch(e){toast('สำรองไม่สำเร็จ: '+e.message,'err')}}
-async function importBackup(){const i=document.createElement('input');i.type='file';i.accept='application/json';i.onchange=async()=>{const f=i.files[0];if(!f)return;try{const data=JSON.parse(await f.text());for(const d of data.days||[]){const local=await get('days',d.date);if(!local||num(d.updatedAt)>=num(local.updatedAt))await put('days',d)}for(const im of data.images||[]){if(await get('images',im.id))continue;const b64=data.imageData?.[im.id];if(!b64)continue;const bin=atob(b64),arr=new Uint8Array(bin.length);for(let j=0;j<bin.length;j++)arr[j]=bin.charCodeAt(j);await put('images',{...im,blob:new Blob([arr],{type:im.type||'image/png'})})}for(const [k,v] of Object.entries(data.settings||{}))await put('settings',{key:k,value:v});await loadData();render();toast('นำเข้าไฟล์สำรองเรียบร้อย','ok')}catch(e){toast('นำเข้าไม่สำเร็จ: '+e.message,'err')}};i.click()}
 
-let gToken=null,gExp=0,gClient=null;
-function loadGIS(){if(window.google?.accounts?.oauth2)return Promise.resolve();return new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://accounts.google.com/gsi/client';s.async=true;s.defer=true;s.onload=res;s.onerror=()=>rej(new Error('โหลด Google Identity ไม่สำเร็จ'));document.head.appendChild(s)})}
-async function driveToken(){const id=state.settings.driveClientId;if(!id)throw new Error('ยังไม่ได้ใส่ Google OAuth Client ID');if(gToken&&Date.now()<gExp-60000)return gToken;await loadGIS();return new Promise((res,rej)=>{gClient=google.accounts.oauth2.initTokenClient({client_id:id,scope:'https://www.googleapis.com/auth/drive.file',callback:r=>{if(r.error)return rej(new Error(r.error_description||r.error));gToken=r.access_token;gExp=Date.now()+(Number(r.expires_in)||3600)*1000;res(gToken)},error_callback:e=>rej(new Error(e.message||e.type||'auth error'))});gClient.requestAccessToken();})}
-async function driveApi(path,opt={}){const q=new URLSearchParams(opt.query||{}).toString(),url=(path.startsWith('http')?path:'https://www.googleapis.com/drive/v3'+path)+(q?'?'+q:'');const r=await fetch(url,{method:opt.method||'GET',headers:{Authorization:'Bearer '+gToken,...(opt.headers||{})},body:opt.body});if(!r.ok)throw new Error('Drive '+r.status);return opt.raw?r:r.json()}
-async function driveUpload(meta,blob,id){const b='tm'+Math.random().toString(36).slice(2),head=`--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n--${b}\r\nContent-Type: ${blob.type||'application/octet-stream'}\r\n\r\n`,body=new Blob([head,blob,`\r\n--${b}--`]);return driveApi('https://www.googleapis.com/upload/drive/v3/files'+(id?'/'+id:''),{method:id?'PATCH':'POST',query:{uploadType:'multipart',fields:'id,name,modifiedTime'},headers:{'Content-Type':`multipart/related; boundary=${b}`},body})}
-async function driveFind(name,parent,mime){let q=`name = '${name.replace(/'/g,"\\\\'")}' and trashed = false`;if(parent)q+=` and '${parent}' in parents`;if(mime)q+=` and mimeType = '${mime}'`;const r=await driveApi('/files',{query:{q,fields:'files(id,name,modifiedTime,size)',pageSize:10,spaces:'drive'}});return r.files?.[0]||null}
-async function driveFolder(name,parent){const f=await driveFind(name,parent,'application/vnd.google-apps.folder');if(f)return f.id;const meta={name,mimeType:'application/vnd.google-apps.folder'};if(parent)meta.parents=[parent];const r=await driveApi('/files',{method:'POST',query:{fields:'id'},headers:{'Content-Type':'application/json'},body:JSON.stringify(meta)});return r.id}
-async function driveList(parent){const r=await driveApi('/files',{query:{q:`'${parent}' in parents and trashed = false`,fields:'files(id,name,modifiedTime,size,mimeType)',pageSize:1000,spaces:'drive',orderBy:'modifiedTime desc'}});return r.files||[]}
-async function driveDownload(fileId){const r=await driveApi(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`,{method:'GET',raw:true});return await r.text()}
-async function driveDownloadBlob(fileId){const r=await driveApi(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`,{method:'GET',raw:true});return await r.blob()}
-async function driveResolveRoot(){if(state.settings.driveRootId){try{const r=await driveApi('/files/'+encodeURIComponent(state.settings.driveRootId),{query:{fields:'id,name,mimeType,trashed'}});if(r&&r.id&&!r.trashed)return r.id}catch(_){}}const roots=await driveList('root');const candidates=roots.filter(f=>f.mimeType==='application/vnd.google-apps.folder'&&f.name===(state.settings.driveFolderName||'Trade Memo'));let best=null;for(const folder of candidates){const fs=await driveList(folder.id),df=fs.find(f=>f.name==='trade-memo-data.json');if(df&&(!best||new Date(df.modifiedTime)>new Date(best.df.modifiedTime)))best={folder,df};}const id=best?best.folder.id:await driveFolder(state.settings.driveFolderName||'Trade Memo');await saveScalarSetting('driveRootId',id);return id}
-function mergeDays(localDays,remoteDays){const map=new Map(localDays.map(d=>[d.date,d]));for(const rd of (remoteDays||[])){const ld=map.get(rd.date);if(!ld||num(rd.updatedAt)>num(ld.updatedAt))map.set(rd.date,rd)}return [...map.values()].sort((a,b)=>a.date.localeCompare(b.date))}
-async function driveSync(){try{await driveToken();toast('กำลังอ่านข้อมูลล่าสุดจาก Google Drive…');const root=await driveResolveRoot(),files=await driveList(root),df=files.find(f=>f.name==='trade-memo-data.json'),localData=await exportData(false);let remoteData=null;if(df)try{remoteData=JSON.parse(await driveDownload(df.id))}catch(_){}const mergedDays=mergeDays(localData.days,remoteData?.days||[]);for(const d of mergedDays)await put('days',d);state.days=mergedDays;if(remoteData?.settings){const rs=remoteData.settings,lv=num(state.settings.syncRevision),rv=num(rs.syncRevision);if(rv>=lv)for(const k of Object.keys(rs))if(!['driveRootId','driveImagesId','driveClientId','claudeKey','claudeModel','geminiKey','geminiModel','lastSync'].includes(k))state.settings[k]=rs[k];state.settings.setupOptions=[...new Set([...setupOptions(),...(rs.setupOptions||[])])]}state.settings.syncRevision=Math.max(Date.now(),num(remoteData?.settings?.syncRevision)+1);const merged={version:3,app:'Trade Memo Private',exportedAt:new Date().toISOString(),settings:{currency:state.settings.currency,startingBalance:state.settings.startingBalance,theme:state.settings.theme,driveFolderName:state.settings.driveFolderName,lastSymbol:state.settings.lastSymbol,setupOptions:setupOptions(),timeOffsetMinutes:state.settings.timeOffsetMinutes,syncRevision:state.settings.syncRevision},days:mergedDays,images:[...new Map([...(remoteData?.images||[]),...(localData.images||[])].map(im=>[im.id,im])).values()],imageData:{}};await put('settings',{key:'syncRevision',value:state.settings.syncRevision});const blob=new Blob([JSON.stringify(merged)],{type:'application/json'});if(df)await driveUpload({name:'trade-memo-data.json'},blob,df.id);else await driveUpload({name:'trade-memo-data.json',parents:[root]},blob);const imgFolder=await driveFolder('images',root);await saveScalarSetting('driveImagesId',imgFolder);const remoteImgs=await driveList(imgFolder),haveRemote=new Set(remoteImgs.map(f=>f.name));for(const im of await all('images')){const ext=(im.type||'image/png').split('/')[1].replace('jpeg','jpg'),name=`${im.id}.${ext}`;if(!haveRemote.has(name))await driveUpload({name,parents:[imgFolder]},im.blob)}const localImgs=await all('images'),haveLocal=new Set(localImgs.map(x=>x.id)),remoteMeta=new Map((remoteData?.images||[]).map(x=>[x.id,x]));for(const f of await driveList(imgFolder)){const m=f.name.match(/^(.+)\.(png|jpg|jpeg|webp|gif)$/i);if(!m||haveLocal.has(m[1]))continue;try{const b=await driveDownloadBlob(f.id),meta=remoteMeta.get(m[1])||{};await put('images',{id:m[1],date:meta.date||'',kind:meta.kind||'mt5',name:meta.name||f.name,type:meta.type||b.type||f.mimeType,createdAt:meta.createdAt||new Date(f.modifiedTime).getTime()||Date.now(),blob:b})}catch(_){} }state.settings.lastSync=new Date().toISOString();await put('settings',{key:'lastSync',value:state.settings.lastSync});await loadData();await render();toast('Sync สำเร็จ: รวมข้อมูลล่าสุดจาก iMac/iPhone แล้ว','ok')}catch(e){toast('Sync ไม่สำเร็จ: '+e.message,'err')}}
-function driveSignOut(){if(gToken&&window.google)google.accounts.oauth2.revoke(gToken,()=>{});gToken=null;gExp=0;toast('ออกจาก Google แล้ว','ok')}
-
-window.addEventListener('hashchange',()=>{const h=location.hash.replace(/^#\/?/,'');const [v,d]=h.split('/');if(['diary','dashboard','settings'].includes(v)){state.view=v;if(d)state.date=d;render()}});
-window.addEventListener('DOMContentLoaded',async()=>{await loadData();const h=location.hash.replace(/^#\/?/,'');const [v,d]=h.split('/');if(['diary','dashboard','settings'].includes(v)){state.view=v;if(d)state.date=d}else{location.hash='#/diary/'+state.date}render()});
+async function boot(){
+  await loadData();
+  window.addEventListener('hashchange',()=>{
+    const h=location.hash.slice(2).split('/');
+    if(h[0]) state.view=h[0];
+    if(h[1]) { state.date=h[1]; state.anchor=h[1]; }
+    render();
+  });
+  if(location.hash){
+    const h=location.hash.slice(2).split('/');
+    if(h[0]) state.view=h[0];
+    if(h[1]) { state.date=h[1]; state.anchor=h[1]; }
+  }
+  await render();
+}
+boot();
 })();
 </script>
 </body>
