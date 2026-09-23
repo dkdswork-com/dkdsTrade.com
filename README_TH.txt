@@ -1,48 +1,24 @@
-# Trade Memo Private v2
+# Trade Memo Private v6
 
-เวอร์ชันนี้ทำหน้าตา/โครงสร้างและ workflow ให้ใกล้ Trade Memo ต้นแบบมากขึ้น แต่เป็นโค้ดแยกของคุณเองและ local-first
+## V6 เพิ่ม/แก้
+- Order ใน Diary และตอน Import จะเรียงตามวัน-เวลาเข้าออเดอร์จากเก่า → ใหม่ ทำให้เห็นลำดับการออกไม้ต่อเนื่อง แม้เพิ่มทีละรอบ
+- ราคาเข้าและราคาออกถูกตัดทศนิยมที่เกิน 3 ตำแหน่งตอนบันทึก (ไม่ปัดขึ้น) และแสดง 3 ตำแหน่ง
 
-## มีให้แล้ว
-- Diary + week strip
-- Pre-trade plan: Bias / Setup / Entry-Exit / Risk-News
-- รูป plan / MT5 / review
-- เพิ่ม/แก้ไข/ลบ trade
-- Symbol / side / lot / entry / exit / SL / TP / P&L / commission / swap / ticket / notes
-- Dashboard: day / week / month / year / all
-- Winrate / Net P&L / Profit Factor / Expectancy / R:R / Max Drawdown / Best/Worst / Streak / Lots
-- Equity curve / P&L bar chart
-- Monthly calendar
-- Breakdown ตามช่วงเวลา / symbol / side / weekday
-- Backup/Restore JSON รวมรูป
-- Optional Claude/Gemini screenshot extraction
-- Optional Google Drive sync ด้วย Drive API scope drive.file
-- ไม่มี analytics ในตัวแอป
-- IndexedDB เป็น storage หลัก
-- Responsive / PWA structure
+## V5 เพิ่ม/แก้
+- Gemini เท่านั้นสำหรับอ่านภาพ MT5 หลายภาพ
+- ใช้ Structured JSON Output เพื่อลด JSON parse error
+- Gemini models: 3.5 Flash-Lite (`gemini-3.5-flash-lite`), 3.6 Flash (`gemini-3.6-flash`), 3.1 Pro (`gemini-3.1-pro-preview`)
+- รองรับ CSV/Excel และ MT5 Export จริง โดยเฉพาะ `opening_time_utc`, `closing_time_utc`, `type`, `lots`, `original_position_size`, `symbol`, `opening_price`, `closing_price`, `stop_loss`, `take_profit`, `commission`, `swap`, `profit`, `equity`, `margin_level`, `close_reason`, `ticket`
+- ปรับเวลา MT5/UTC → เวลาไทย +7 ชั่วโมงตอนนำเข้า/บันทึก และรองรับข้ามวัน
+- แยก Cent symbol ที่ลงท้าย `c`
+- Google Drive sync ผสาน Order ระดับรายการ, Plan/Review แยก timestamp และรองรับ tombstone สำหรับการลบ Order
+- แก้ `saveScalarSetting` ที่หายไป ซึ่งทำให้ V4 ขึ้น `saveScalarSetting is not defined`
 
-## เปิดใช้บน Mac
-ใน Terminal:
-python3 -m http.server 8765
+## Import
+Diary → `📥 อ่านจาก MT5` → เลือกหลายภาพ → `Gemini อ่านภาพ` หรือเลือก CSV/Excel → ตรวจสอบ Preview → เพิ่มรายการที่เลือก
 
-แล้วเปิด:
-http://localhost:8765
+## Google Drive
+ใส่ OAuth Client ID เดิมและใช้ `☁️ ซิงค์เดี๋ยวนี้`. ระบบอ่านข้อมูลจาก Drive ก่อน แล้ว merge ข้อมูลในเครื่องกับข้อมูลบน Drive จากนั้นอัปโหลดชุดข้อมูลที่รวมแล้วกลับขึ้น Drive.
 
-## Cloud hosting
-แนะนำ GitHub Pages / Cloudflare Pages / Netlify จากบัญชีของคุณเอง
-Google Drive และ OneDrive ใช้เก็บ backup ได้ แต่ไม่ควรใช้เป็น web host
-
-## สำคัญ
-- ห้ามใส่ MT5 password / broker password / API secret / private key / seed phrase
-- ถ้าใช้ Claude/Gemini ภาพ MT5 ที่เลือกจะถูกส่งไป provider นั้นโดยตรง
-- Google Drive sync ส่งข้อมูล/รูปขึ้น Drive ของ Google account ที่คุณ authorize
-
-
-## V3 additions
-- Setup dropdown: QM, Double Top, Double Bottom, M Pattern, W Pattern, Liquidity Sweep, BOS / CHoCH
-- Setup Manager: เพิ่ม/ลบแผนเองได้
-- Dashboard: Setup statistics และ Asset × Setup
-- Mobile camera capture
-- Gemini default: gemini-3.8-flash (GA as of Sep 2026)
-- AI confirmation before sending screenshot
-
-V3.1 final: merged local+remote image metadata so downloaded images retain diary date/type.
+## เวลา
+ค่าเริ่มต้น +7 ชั่วโมง ตัวอย่าง `2026-09-18 23:50:00` → `2026-09-19 06:50:00`.

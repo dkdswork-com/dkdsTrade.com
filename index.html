@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0b1220">
 <meta name="description" content="Private, local-first trading journal">
 <link rel="manifest" href="manifest.json">
-<title>📓 Trade Memo Private</title>
+<title>📓 Trade Memo Private V6</title>
 <style>
 :root{
  --bg:#0b1220;--bg2:#0f1728;--card:#121c2f;--card2:#18243a;--line:#273652;
@@ -83,6 +83,12 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;',
 const money = (n,cur) => { if(!Number.isFinite(Number(n))) return '∞'; const x=Number(n); return `${x<0?'-':''}${Math.abs(x).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}${cur?' '+cur:''}`; };
 const signed=(n,cur)=>`${Number(n)>0?'+':''}${money(n,cur)}`;
 const num=(x)=>{const n=Number(x);return Number.isFinite(n)?n:0};
+// ราคาที่บันทึกในระบบใช้ทศนิยมสูงสุด 3 ตำแหน่ง โดย 'ตัด' เศษส่วนที่เกินออก ไม่ปัดขึ้น
+const truncate3=(x)=>{const n=Number(x);if(!Number.isFinite(n))return 0;return Math.trunc(n*1000)/1000};
+const price3=(x)=>truncate3(x).toFixed(3);
+const clock3=(x)=>{const m=String(x??'').trim().match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?/);return m?`${String(m[1]).padStart(2,'0')}:${m[2]}:${m[3]||'00'}`:''};
+const tradeChronologyKey=(t,fallbackDate='')=>{const d=String(t?.entryDate||t?.date||fallbackDate||t?.exitDate||'9999-12-31');const tm=clock3(t?.entryTime)||clock3(t?.exitTime)||'99:99:99';const created=String(num(t?.createdAt)||0).padStart(16,'0');return `${d} ${tm} ${created}`};
+const sortTradesChronological=(trades,fallbackDate='')=>[...(trades||[])].sort((a,b)=>tradeChronologyKey(a,fallbackDate).localeCompare(tradeChronologyKey(b,fallbackDate)));
 const uid=()=>crypto.randomUUID?crypto.randomUUID():`${Date.now()}-${Math.random().toString(36).slice(2)}`;
 const $=(q,r=document)=>r.querySelector(q), $$=(q,r=document)=>[...r.querySelectorAll(q)];
 const isCent = t => (t.symbol||'').trim().endsWith('c');
@@ -139,7 +145,7 @@ function metrics(trades){
  avgWin:wins.length?grossWin/wins.length:0,avgLoss:losses.length?grossLoss/losses.length:0,rr:losses.length?(wins.length?grossWin/wins.length/(grossLoss/losses.length):0):(grossWin?Infinity:0),
  maxDD,maxWinStreak:maxW,maxLossStreak:maxL,best:nets.length?Math.max(...nets):0,worst:nets.length?Math.min(...nets):0,lots:trades.reduce((a,t)=>a+num(t.lots),0)}
 }
-function tradesInRange(days,start,end){const s=fmtDate(start),e=fmtDate(end);return days.filter(d=>d.date>=s&&d.date<=e).flatMap(d=>(d.trades||[]).map(t=>({...t,date:d.date}))).sort((a,b)=>(a.date+(a.exitTime||a.entryTime||'')).localeCompare(b.date+(b.exitTime||b.entryTime||'')));}
+function tradesInRange(days,start,end){const s=fmtDate(start),e=fmtDate(end);return days.filter(d=>d.date>=s&&d.date<=e).flatMap(d=>(d.trades||[]).map(t=>({...t,date:d.date}))).sort((a,b)=>tradeChronologyKey(a,a.date).localeCompare(tradeChronologyKey(b,b.date)));}
 function range(period,anchor){
  const a=parseDate(anchor);
  if(period==='day')return {start:a,end:a,label:anchor};
@@ -238,9 +244,9 @@ function openImageViewer(id){all('images').then(arr=>{const i=arr.find(x=>x.id==
 function bindImages(root,date){root.addEventListener('click',async e=>{const delb=e.target.closest('[data-delimg]');if(delb){await del('images',delb.dataset.delimg);if(state.objectUrls.has(delb.dataset.delimg)){URL.revokeObjectURL(state.objectUrls.get(delb.dataset.delimg));state.objectUrls.delete(delb.dataset.delimg)}await diary($('#page'));return}const im=e.target.closest('[data-imgid]');if(im&&!e.target.closest('[data-delimg]')){openImageViewer(im.dataset.imgid);return}const add=e.target.closest('[data-addimg]');if(add){const inp=document.createElement('input');inp.type='file';inp.accept='image/*';inp.multiple=true;inp.onchange=async()=>{for(const f of inp.files)await addImage(f,date,add.dataset.addimg);await diary($('#page'))};inp.click();}})}
 
 async function addImage(file,date,kind){await put('images',{id:uid(),date,kind,name:file.name,type:file.type,createdAt:Date.now(),blob:file});}
-async function tradeListHtml(trades,date){return trades.map(t=>{
+async function tradeListHtml(trades,date){return sortTradesChronological(trades,date).map(t=>{
  const cur = isCent(t)?state.settings.currency+'c':state.settings.currency;
- return `<div class="trade-row"><div><div class="sym">${esc(t.symbol)}</div><div class="meta">${esc(t.entryTime||'')} → ${esc(t.exitTime||'')} · ${esc(t.side||'')} · ${Number(t.lots||0).toFixed(2)} lot</div></div><div><span class="pill">${esc(t.ticket||'')}</span><div class="meta">${esc(t.notes||'')}</div></div><div class="pl ${tradeNet(t)>=0?'pos':'neg'}">${signed(tradeNet(t),cur)}<div class="meta">${num(t.entryPrice)} → ${num(t.exitPrice)}</div><button class="btn small" data-edit="${t.id}" style="margin-top:5px">แก้ไข</button></div></div>`;
+ return `<div class="trade-row"><div><div class="sym">${esc(t.symbol)}</div><div class="meta">${esc(t.entryTime||'')} → ${esc(t.exitTime||'')} · ${esc(t.side||'')} · ${Number(t.lots||0).toFixed(2)} lot</div></div><div><span class="pill">${esc(t.ticket||'')}</span><div class="meta">${esc(t.notes||'')}</div></div><div class="pl ${tradeNet(t)>=0?'pos':'neg'}">${signed(tradeNet(t),cur)}<div class="meta">${price3(t.entryPrice)} → ${price3(t.exitPrice)}</div><button class="btn small" data-edit="${t.id}" style="margin-top:5px">แก้ไข</button></div></div>`;
 }).join('')||'<div class="muted">ยังไม่มีออเดอร์วันนี้</div>'}
 
 async function diary(app){
@@ -281,7 +287,7 @@ async function diary(app){
  <label class="field"><span>Setup วันนี้เป็นยังไง</span><textarea data-bind="plan.setup" placeholder="เช่น ราคาอยู่ในโซน demand H4, รอ break structure ใน M15 แล้วค่อยเข้า…">${esc(d.plan.setup)}</textarea></label>
  <div class="grid2"><label class="field"><span>เงื่อนไขเข้า / ออก</span><textarea data-bind="plan.entryRules" placeholder="เข้าเมื่อ… ออกเมื่อ… SL ที่… TP ที่…">${esc(d.plan.entryRules)}</textarea></label><label class="field"><span>ความเสี่ยง / lot / ข่าว</span><textarea data-bind="plan.riskNotes" placeholder="เสี่ยง 1% ต่อไม้, ข่าว NFP…">${esc(d.plan.riskNotes)}</textarea></label></div>
  <div><div class="small muted" style="margin-bottom:7px">รูปกราฟที่วาดไว้</div><div class="imgs" id="planImgs">${imagesHtml(planImgs,'plan')}</div></div></div></section>
- <section class="card"><div class="card-head"><h2>📈 ออเดอร์วันนี้</h2><div class="row"><button class="btn soft small" id="readMT5">📷 อ่านจาก MT5</button><button class="btn small" id="addTrade">＋ เพิ่ม</button></div></div>
+ <section class="card"><div class="card-head"><div><h2>📈 ออเดอร์วันนี้</h2><div class="small muted">เรียงตามวัน-เวลาเข้าออเดอร์ จากเก่า → ใหม่</div></div><div class="row"><button class="btn soft small" id="readMT5">📷 อ่านจาก MT5</button><button class="btn small" id="addTrade">＋ เพิ่ม</button></div></div>
  ${tilesHtml}
  <div id="tradeList">${await tradeListHtml(d.trades,state.date)}</div>
  <details style="margin-top:12px" ${mt5Imgs.length?'open':''}><summary>ภาพหน้าจอ MT5 ที่บันทึกไว้</summary><div class="imgs" id="mt5Imgs" style="margin-top:8px">${imagesHtml(mt5Imgs,'mt5')}</div></details>
@@ -310,7 +316,7 @@ function tradeModal(existing=null){
  const c=openModal(`<div class="modal-head"><h3>📈 ${existing?'แก้ไข':'เพิ่ม'}ออเดอร์</h3><button class="iconbtn" data-x>✕</button></div>
  <form id="tradeForm" class="formgrid"><label class="field"><span>คู่เงิน / Symbol</span><input name="symbol" required value="${esc(t.symbol)}"></label><label class="field"><span>ฝั่ง</span><select name="side"><option value="buy" ${t.side==='buy'?'selected':''}>Buy</option><option value="sell" ${t.side==='sell'?'selected':''}>Sell</option></select></label>
  <label class="field"><span>Lot</span><input name="lots" required type="number" step="any" value="${esc(t.lots)}"></label><label class="field"><span>Ticket</span><input name="ticket" value="${esc(t.ticket||'')}"></label>
- <label class="field"><span>ราคาเข้า</span><input name="entryPrice" type="number" step="any" value="${esc(t.entryPrice)}"></label><label class="field"><span>ราคาออก</span><input name="exitPrice" type="number" step="any" value="${esc(t.exitPrice)}"></label>
+ <label class="field"><span>ราคาเข้า (3 ตำแหน่ง)</span><input name="entryPrice" type="number" step="0.001" value="${t.entryPrice==='' ? '' : price3(t.entryPrice)}"></label><label class="field"><span>ราคาออก (3 ตำแหน่ง)</span><input name="exitPrice" type="number" step="0.001" value="${t.exitPrice==='' ? '' : price3(t.exitPrice)}"></label>
  <label class="field"><span>เวลาเข้า</span><input name="entryTime" value="${esc(t.entryTime||'')}" placeholder="09:30"></label><label class="field"><span>เวลาออก</span><input name="exitTime" value="${esc(t.exitTime||'')}" placeholder="11:40"></label>
  <label class="field"><span>SL</span><input name="sl" type="number" step="any" value="${esc(t.sl)}"></label><label class="field"><span>TP</span><input name="tp" type="number" step="any" value="${esc(t.tp)}"></label>
  <label class="field"><span>P&L</span><input name="pnl" required type="number" step="any" value="${esc(t.pnl)}"></label><label class="field"><span>ค่าคอม</span><input name="commission" type="number" step="any" value="${esc(t.commission)}"></label>
@@ -323,8 +329,8 @@ function tradeModal(existing=null){
  $('#saveTrade',c).onclick=async()=>{const f=$('#tradeForm');if(!f.reportValidity())return;const fd=new FormData(f);let setup=String(fd.get('setup')||'');const custom=String(fd.get('setupCustom')||'').trim();if(setup==='__OTHER__')setup=custom;
    let rawSym=String(fd.get('symbol')).trim();
    let sym = (rawSym.endsWith('c')||rawSym.endsWith('C')) ? rawSym.slice(0,-1).toUpperCase()+'c' : rawSym.toUpperCase();
-   const now=Date.now();const z={...t,symbol:sym,side:fd.get('side'),lots:num(fd.get('lots')),entryPrice:num(fd.get('entryPrice')),exitPrice:num(fd.get('exitPrice')),pnl:num(fd.get('pnl')),entryTime:String(fd.get('entryTime')).trim(),exitTime:String(fd.get('exitTime')).trim(),sl:num(fd.get('sl')),tp:num(fd.get('tp')),commission:num(fd.get('commission')),swap:num(fd.get('swap')),ticket:String(fd.get('ticket')).trim(),setup,notes:String(fd.get('notes')).trim(),createdAt:t.createdAt||now,updatedAt:now};if(setup&&!setupOptions().includes(setup)){state.settings.setupOptions=[...setupOptions(),setup];await put('settings',{key:'setupOptions',value:state.settings.setupOptions});}
-   state.day.deletedTradeIds=(state.day.deletedTradeIds||[]).filter(id=>id!==z.id);if(existing)Object.assign(existing,z);else state.day.trades.push(z);state.day.updatedAt=now;await put('days',state.day);state.settings.lastSymbol=z.symbol;await put('settings',{key:'lastSymbol',value:z.symbol});closeModal();toast('บันทึกออเดอร์แล้ว','ok');render();};
+   const now=Date.now();const z={...t,symbol:sym,side:fd.get('side'),lots:num(fd.get('lots')),entryPrice:truncate3(fd.get('entryPrice')),exitPrice:truncate3(fd.get('exitPrice')),pnl:num(fd.get('pnl')),entryTime:String(fd.get('entryTime')).trim(),exitTime:String(fd.get('exitTime')).trim(),entryDate:t.entryDate||state.date,exitDate:t.exitDate||state.date,sl:num(fd.get('sl')),tp:num(fd.get('tp')),commission:num(fd.get('commission')),swap:num(fd.get('swap')),ticket:String(fd.get('ticket')).trim(),setup,notes:String(fd.get('notes')).trim(),createdAt:t.createdAt||now,updatedAt:now};if(setup&&!setupOptions().includes(setup)){state.settings.setupOptions=[...setupOptions(),setup];await put('settings',{key:'setupOptions',value:state.settings.setupOptions});}
+   state.day.deletedTradeIds=(state.day.deletedTradeIds||[]).filter(id=>id!==z.id);if(existing)Object.assign(existing,z);else state.day.trades.push(z);state.day.trades=sortTradesChronological(state.day.trades,state.date);state.day.updatedAt=now;await put('days',state.day);state.settings.lastSymbol=z.symbol;await put('settings',{key:'lastSymbol',value:z.symbol});closeModal();toast('บันทึกออเดอร์แล้ว','ok');render();};
  if(existing)$('#delTrade',c).onclick=async()=>{const now=Date.now();state.day.trades=state.day.trades.filter(x=>x.id!==existing.id);state.day.deletedTradeIds=[...new Set([...(state.day.deletedTradeIds||[]),existing.id])];state.day.updatedAt=now;await put('days',state.day);closeModal();toast('ลบออเดอร์แล้ว','ok');render()};
 }
 async function previewToday(){
@@ -412,8 +418,8 @@ function normalizeImportedTrade(raw,fallbackDate=state.date,source='file'){
  const side=normalizeSide(firstField(raw,['Side','Type','type','Direction','Order Type','ฝั่ง','ประเภท']));
  const lots=parseNumFlexible(firstField(raw,['Lots','lots','Lot','Volume','Size','Quantity','ปริมาณ']));
  const originalPositionSize=parseNumFlexible(firstField(raw,['original_position_size','Original Position Size','OriginalPositionSize']));
- const entryPrice=parseNumFlexible(firstField(raw,['Entry Price','Open Price','opening_price','Price Open','ราคาเข้า','ราคาเปิด']));
- const exitPrice=parseNumFlexible(firstField(raw,['Exit Price','Close Price','closing_price','Price Close','ราคาออก','ราคาปิด'])) || parseNumFlexible(firstField(raw,['Close Price 2','Price']));
+ const entryPrice=truncate3(parseNumFlexible(firstField(raw,['Entry Price','Open Price','opening_price','Price Open','ราคาเข้า','ราคาเปิด'])));
+ const exitPrice=truncate3(parseNumFlexible(firstField(raw,['Exit Price','Close Price','closing_price','Price Close','ราคาออก','ราคาปิด'])) || parseNumFlexible(firstField(raw,['Close Price 2','Price'])));
  const pnl=parseNumFlexible(firstField(raw,['P&L','PnL','Pnl','PL','Profit','profit','Net Profit','Profit/Loss','กำไร','กำไร/ขาดทุน','ผลกำไร']));
  const commission=parseNumFlexible(firstField(raw,['Commission','commission','ค่าคอม','ค่าคอมมิชชั่น']));
  const swap=parseNumFlexible(firstField(raw,['Swap','swap','สวอป']));
@@ -436,7 +442,7 @@ async function saveImportedTrades(trades,source,imagesToSave=[]){
  const clean=dedupeTrades(trades.filter(validImportedTrade));if(!clean.length)throw new Error('ไม่พบแถวที่มีข้อมูลออเดอร์');
  const byDate=new Map();for(const t of clean){const d=t.journalDate||state.date;if(!byDate.has(d))byDate.set(d,[]);byDate.get(d).push(t)}
  let added=0,skipped=0;
- for(const [date,rows] of byDate){const day=await getDay(date);day.deletedTradeIds=day.deletedTradeIds||[];const have=new Set((day.trades||[]).map(tradeFingerprint));let dateAdded=0;for(const t of rows){const now=Date.now();const z={id:uid(),createdAt:now,updatedAt:now,pnl:num(t.pnl),commission:num(t.commission),swap:num(t.swap),lots:num(t.lots),...t};const fp=tradeFingerprint(z);if(have.has(fp)){skipped++;continue}have.add(fp);day.trades.push(z);dateAdded++;}day.updatedAt=Date.now();await put('days',day);added+=dateAdded}
+ for(const [date,rows] of byDate){const day=await getDay(date);day.deletedTradeIds=day.deletedTradeIds||[];const have=new Set((day.trades||[]).map(tradeFingerprint));let dateAdded=0;for(const t of sortTradesChronological(rows,date)){const now=Date.now();const z={id:uid(),createdAt:now,updatedAt:now,pnl:num(t.pnl),commission:num(t.commission),swap:num(t.swap),lots:num(t.lots),entryPrice:truncate3(t.entryPrice),exitPrice:truncate3(t.exitPrice),...t};z.entryPrice=truncate3(z.entryPrice);z.exitPrice=truncate3(z.exitPrice);z.entryDate=z.entryDate||date;z.exitDate=z.exitDate||date;const fp=tradeFingerprint(z);if(have.has(fp)){skipped++;continue}have.add(fp);day.trades.push(z);dateAdded++;}day.trades=sortTradesChronological(day.trades,date);day.updatedAt=Date.now();await put('days',day);added+=dateAdded}
  for(const {blob,name='MT5 import'} of imagesToSave) await addImage(blob,state.date,'mt5');
  state.day=await getDay(state.date);state.days=await all('days');
  return {added,skipped,dates:[...byDate.keys()].sort()};
@@ -498,6 +504,7 @@ async function aiParseImages(c,imagesList){
  }catch(e){$('#aiOut',c).innerHTML=`<span class="neg">เกิดข้อผิดพลาด: ${esc(e.message)}</span>`}
 }
 async function selectParsed(trades,title='ตรวจสอบรายการจากไฟล์'){
+ trades=sortTradesChronological(trades,state.date);
  const c=openModal(`<div class="modal-head"><h3>${esc(title)}</h3><button class="iconbtn" data-x>✕</button></div><div class="progress-note">พบ ${trades.length} รายการ · เลือกเฉพาะรายการที่ต้องการบันทึกได้ · วัน/เวลาที่แสดงเป็น <b>หลังปรับเวลาไทย ${getTimeOffsetMinutes()>=0?'+':''}${(getTimeOffsetMinutes()/60)}</b> ชม.</div><div class="preview-wrap"><table class="table"><thead><tr><th></th><th>วันที่</th><th>Symbol</th><th>Side</th><th>Lot</th><th>เข้า</th><th>ออก</th><th>P&L</th><th>Ticket</th></tr></thead><tbody>${trades.map((t,i)=>`<tr><td><input type="checkbox" data-p="${i}" checked></td><td>${esc(t.journalDate||'')}</td><td>${esc(t.symbol)}</td><td>${esc(t.side)}</td><td>${num(t.lots).toFixed(2)}</td><td>${esc(t.entryTime||'')}</td><td>${esc(t.exitTime||'')}</td><td class="${num(t.pnl)>=0?'pos':'neg'}">${num(t.pnl).toFixed(2)}</td><td>${esc(t.ticket||'')}</td></tr>`).join('')}</tbody></table></div><div class="modal-foot"><button class="btn" data-x>ยกเลิก</button><button class="btn primary" id="okParsed">เพิ่มรายการที่เลือก</button></div>`);
  $$('[data-x]',c).forEach(b=>b.onclick=closeModal);return new Promise(resolve=>{$('#okParsed',c).onclick=()=>{const out=trades.filter((_,i)=>$(`[data-p="${i}"]`,c)?.checked);closeModal();resolve(out)}})
 }
