@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0b1220">
 <meta name="description" content="Private, local-first trading journal">
 <link rel="manifest" href="manifest.json">
-<title>📓 Trade Memo Private V6</title>
+<title>📓 Trade Memo Private V8</title>
 <style>
 :root{
  --bg:#0b1220;--bg2:#0f1728;--card:#121c2f;--card2:#18243a;--line:#273652;
@@ -44,7 +44,7 @@ a{color:var(--accent)}
 .tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.tile{border:1px solid var(--line);background:var(--card2);border-radius:13px;padding:13px}.tile .l{font-size:11px;color:var(--muted);display:block}.tile .v{font-size:22px;font-weight:850;margin-top:5px;display:block}.tile .s{font-size:11px;color:var(--muted);display:block;margin-top:3px}.tile.hero{grid-column:span 2;display:flex;align-items:center;gap:15px}
 .donut{width:94px;height:94px;position:relative;flex:none}.donut svg{width:100%;height:100%;transform:rotate(-90deg)}.donut .center{position:absolute;inset:0;display:grid;place-items:center;font-size:17px;font-weight:850}
 .table-wrap{overflow:auto}.table{width:100%;border-collapse:collapse}.table th,.table td{padding:9px 8px;border-bottom:1px solid var(--line);font-size:12px;white-space:nowrap;text-align:left}.table th{color:var(--muted);font-weight:600}.table tr.clickable{cursor:pointer}.table tr.clickable:hover{background:var(--card2)}
-.trade-row{display:grid;grid-template-columns:90px 1fr auto;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)}.trade-row:last-child{border-bottom:0}.trade-row .sym{font-weight:800}.trade-row .meta{font-size:11px;color:var(--muted)}.trade-row .pl{text-align:right;font-weight:850}
+.trade-row{display:grid;grid-template-columns:90px 1fr auto;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)}.trade-row:last-child{border-bottom:0}.trade-row .sym{font-weight:800}.trade-row .meta{font-size:11px;color:var(--muted);overflow-wrap:anywhere;line-height:1.45}.trade-row .pl{text-align:right;font-weight:850}.trade-row .move{font-size:11px;font-weight:650;margin-top:3px;white-space:nowrap}.trade-row .move.pos{color:var(--pos)}.trade-row .move.neg{color:var(--neg)}.table .subcell{display:block;font-size:10px;color:var(--muted);margin-top:2px}.analysis-note{font-size:11px;color:var(--muted);line-height:1.6;margin:0 0 10px}.best-row{background:color-mix(in srgb,var(--pos) 6%,transparent)}.worst-row{background:color-mix(in srgb,var(--neg) 6%,transparent)}
 .imgs{display:flex;flex-wrap:wrap;gap:8px}.img{position:relative;width:132px;height:82px;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--bg2)}.img img{width:100%;height:100%;object-fit:cover}.img .del{position:absolute;right:4px;top:4px;width:25px;height:25px;border:0;border-radius:50%;background:rgba(0,0,0,.62);color:#fff}.img-add{width:132px;height:82px;border:1px dashed var(--line);border-radius:10px;background:transparent;color:var(--muted)}
 .chartbox{overflow:auto;border-radius:12px;background:var(--bg2);padding:5px}.chart{width:100%;min-width:600px;height:220px;display:block}.chart .grid{stroke:var(--line);stroke-width:1}.chart .tick{fill:var(--muted);font-size:10px}.chart .zero{stroke:var(--muted);stroke-dasharray:3 3}.chart .line{fill:none;stroke:var(--accent);stroke-width:3}.chart .area{fill:color-mix(in srgb,var(--accent) 12%,transparent)}.chart .bar.pos{fill:var(--pos)}.chart .bar.neg{fill:var(--neg)}.chart .bar.flat{fill:var(--muted)}
 .periodbar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}.seg{display:flex;flex-wrap:wrap;background:var(--card);border:1px solid var(--line);border-radius:11px;padding:3px}.seg button{border:0;background:transparent;color:var(--muted);padding:8px 11px;border-radius:8px}.seg button.on{background:var(--card2);color:var(--text);font-weight:700}.periodnav{display:flex;align-items:center;gap:7px}.periodnav .lbl{font-size:13px;font-weight:700;min-width:190px;text-align:center}
@@ -87,6 +87,10 @@ const num=(x)=>{const n=Number(x);return Number.isFinite(n)?n:0};
 const truncate3=(x)=>{const n=Number(x);if(!Number.isFinite(n))return 0;return Math.trunc(n*1000)/1000};
 const price3=(x)=>truncate3(x).toFixed(3);
 const clock3=(x)=>{const m=String(x??'').trim().match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?/);return m?`${String(m[1]).padStart(2,'0')}:${m[2]}:${m[3]||'00'}`:''};
+const dateTimeLabel=(date,time,fallbackDate='')=>{const d=String(date||fallbackDate||'').trim();const tm=clock3(time);return d?(tm?`${d} ${tm}`:d):(tm||'วันที่/เวลาไม่ระบุ')};
+const tradeSourceDateKnown=(t,kind)=>{const flag=t?.[`${kind}DateKnown`];if(typeof flag==='boolean')return flag;const rawDate=t?.[kind==='entry'?'rawEntryDate':'rawExitDate'];const rawDateTime=t?.[kind==='entry'?'rawEntryTime':'rawExitTime'];if(t?.importSource&&(rawDate!==undefined||rawDateTime!==undefined))return !!parseDatePart(rawDate,'')||!!parseDatePart(rawDateTime,'');return true};
+const tradeDateLabel=(t,kind,fallbackDate='')=>!tradeSourceDateKnown(t,kind)?'ไม่พบวันที่ในต้นฉบับ':String(t?.[`${kind}Date`]||t?.date||fallbackDate||'วันที่ไม่ระบุ');
+const tradeDateTimeLabel=(t,kind,fallbackDate='')=>{const tm=clock3(t?.[`${kind}Time`]);return !tradeSourceDateKnown(t,kind)?`${tm||'เวลาไม่ระบุ'} · ไม่พบวันที่ในต้นฉบับ`:dateTimeLabel(t?.[`${kind}Date`],t?.[`${kind}Time`],fallbackDate)};
 const tradeChronologyKey=(t,fallbackDate='')=>{const d=String(t?.entryDate||t?.date||fallbackDate||t?.exitDate||'9999-12-31');const tm=clock3(t?.entryTime)||clock3(t?.exitTime)||'99:99:99';const created=String(num(t?.createdAt)||0).padStart(16,'0');return `${d} ${tm} ${created}`};
 const sortTradesChronological=(trades,fallbackDate='')=>[...(trades||[])].sort((a,b)=>tradeChronologyKey(a,fallbackDate).localeCompare(tradeChronologyKey(b,fallbackDate)));
 const uid=()=>crypto.randomUUID?crypto.randomUUID():`${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -132,6 +136,33 @@ async function loadData(){
  document.documentElement.dataset.theme=state.settings.theme||'dark';
 }
 async function saveScalarSetting(key,value){state.settings[key]=value;await put('settings',{key,value});return value;}
+
+// Pip conventions differ by broker/instrument. These are starting defaults only;
+// users can override each symbol in Settings to match the broker contract.
+function baseSymbol(symbol){return String(symbol||'').trim().toUpperCase().replace(/C$/,'');}
+function defaultPipSize(symbol){
+ const s=baseSymbol(symbol);
+ if(s.includes('XAU')||s.includes('GOLD'))return 0.01;
+ const pair=s.match(/^([A-Z]{6})/);if(pair)return pair[1].endsWith('JPY')?0.01:0.0001;
+ return 0.01;
+}
+function pipSizeForSymbol(symbol){
+ const key=baseSymbol(symbol),map=state.settings.pipSizeBySymbol||{},v=Number(map[key]);
+ return Number.isFinite(v)&&v>0?v:defaultPipSize(key);
+}
+function tradeMovement(t){
+ const entry=num(t?.entryPrice),exit=num(t?.exitPrice);
+ if(!(entry>0&&exit>0))return null;
+ const side=String(t?.side||'').toLowerCase(),direction=side==='sell'?-1:1;
+ const delta=(exit-entry)*direction,pipSize=pipSizeForSymbol(t?.symbol);
+ return {delta,pips:delta/pipSize,distance:Math.abs(exit-entry),pipSize};
+}
+function signedFixed(value,digits=3){
+ if(!Number.isFinite(Number(value)))return '—';
+ const n=Number(value),sign=n>0?'+':n<0?'−':'';
+ return sign+Math.abs(n).toFixed(digits);
+}
+function movementPair(m){return m?`${signedFixed(m.delta,3)} / ${signedFixed(m.pips,1)} pips`:'—';}
 
 function tradeNet(t){return num(t.pnl)+num(t.commission)+num(t.swap);}
 function metrics(trades){
@@ -227,6 +258,74 @@ function setupManager(){
   });
 }
 
+function priceMovementAnalytics(trades){
+ const grouped=new Map();
+ for(const t of trades){
+  const mv=tradeMovement(t);if(!mv)continue;
+  const symbol=baseSymbol(t.symbol)||'ไม่ระบุ';
+  if(!grouped.has(symbol))grouped.set(symbol,[]);
+  grouped.get(symbol).push({trade:t,mv});
+ }
+ return [...grouped.entries()].map(([symbol,items])=>{
+  const best=items.reduce((a,x)=>x.mv.pips>a.mv.pips?x:a,items[0]);
+  const worst=items.reduce((a,x)=>x.mv.pips<a.mv.pips?x:a,items[0]);
+  const avgDelta=items.reduce((a,x)=>a+x.mv.delta,0)/items.length;
+  const avgPips=items.reduce((a,x)=>a+x.mv.pips,0)/items.length;
+  const wins=items.filter(x=>x.mv.pips>0),losses=items.filter(x=>x.mv.pips<0);
+  return {symbol,count:items.length,best,worst,avgDelta,avgPips,avgWinPips:wins.length?wins.reduce((a,x)=>a+x.mv.pips,0)/wins.length:null,avgLossPips:losses.length?losses.reduce((a,x)=>a+x.mv.pips,0)/losses.length:null,pipSize:items[0].mv.pipSize};
+ }).sort((a,b)=>a.symbol.localeCompare(b.symbol));
+}
+function priceMovementTable(trades){
+ const rows=priceMovementAnalytics(trades);
+ return `<section class="card"><div class="card-head"><h2>📏 สถิติส่วนต่างราคาและ Pips</h2><span class="small muted">${rows.reduce((n,r)=>n+r.count,0)} ไม้ที่มีราคาเข้า/ออกครบ</span></div>
+ <p class="analysis-note">Δราคาและ Pips คิดตามทิศทางออเดอร์: ค่าเป็นบวกหมายถึงราคาเคลื่อนไปทางที่ออเดอร์ได้ประโยชน์ และค่าลบหมายถึงเคลื่อนไหวสวนทาง สถิติแยกตามสินทรัพย์เพื่อไม่ปะปนหน่วย Pips ที่ต่างกัน</p>
+ ${rows.length?`<div class="table-wrap"><table class="table"><thead><tr><th>สินทรัพย์</th><th>จำนวน</th><th>ดีที่สุด<br><span class="subcell">Δ ราคา / Pips</span></th><th>แย่ที่สุด<br><span class="subcell">Δ ราคา / Pips</span></th><th>เฉลี่ยทุกไม้<br><span class="subcell">Δ ราคา / Pips</span></th><th>เฉลี่ยไม้ชนะ / ไม้แพ้<br><span class="subcell">Pips</span></th></tr></thead><tbody>${rows.map(r=>`<tr><td><b>${esc(r.symbol)}</b><span class="subcell">1 pip = ${Number(r.pipSize).toLocaleString('en-US',{maximumFractionDigits:8})}</span></td><td>${r.count}</td><td class="pos"><b>${signedFixed(r.best.mv.delta,3)} / ${signedFixed(r.best.mv.pips,1)}</b><span class="subcell">Ticket ${esc(r.best.trade.ticket||'—')} · เข้า ${esc(tradeDateTimeLabel(r.best.trade,'entry',r.best.trade.date))}</span></td><td class="neg"><b>${signedFixed(r.worst.mv.delta,3)} / ${signedFixed(r.worst.mv.pips,1)}</b><span class="subcell">Ticket ${esc(r.worst.trade.ticket||'—')} · เข้า ${esc(tradeDateTimeLabel(r.worst.trade,'entry',r.worst.trade.date))}</span></td><td><b>${signedFixed(r.avgDelta,3)} / ${signedFixed(r.avgPips,1)}</b></td><td><span class="pos">${r.avgWinPips===null?'—':signedFixed(r.avgWinPips,1)}</span> / <span class="neg">${r.avgLossPips===null?'—':signedFixed(r.avgLossPips,1)}</span></td></tr>`).join('')}</tbody></table></div>`:'<div class="muted">ยังไม่มีออเดอร์ที่มีราคาเข้าและราคาออกครบ</div>'}</section>`;
+}
+function timeSlotForTrade(t){
+ const m=String(t?.entryTime||'').trim().match(/^(\d{1,2}):(\d{2})/);
+ if(!m)return {key:'unknown',label:'ไม่ระบุเวลา',order:99};
+ const hour=Number(m[1]);if(hour<0||hour>23||Number(m[2])<0||Number(m[2])>59)return {key:'unknown',label:'ไม่ระบุเวลา',order:99};
+ const start=Math.floor(hour/4)*4,end=start+3;
+ const pad=n=>String(n).padStart(2,'0');
+ return {key:String(start).padStart(2,'0'),label:`${pad(start)}:00–${pad(end)}:59`,order:start};
+}
+function timeOfDayAnalytics(trades){
+ const map=new Map();
+ for(const t of trades){const slot=timeSlotForTrade(t);if(!map.has(slot.key))map.set(slot.key,{...slot,trades:[]});map.get(slot.key).trades.push(t)}
+ return [...map.values()].map(x=>({...x,m:metrics(x.trades)})).sort((a,b)=>a.order-b.order);
+}
+function timeOfDayTable(trades,cur){
+ const rows=timeOfDayAnalytics(trades),observed=rows.filter(r=>r.key!=='unknown'&&r.m.total>0);
+ const best=observed.length?observed.reduce((a,b)=>b.m.net>a.m.net?b:a):null;
+ const worst=observed.length?observed.reduce((a,b)=>b.m.net<a.m.net?b:a):null;
+ const fmtResult=r=>r?`${r.label} (${signed(r.m.net,cur)} · ${r.m.total} ไม้)`:'ยังไม่มีข้อมูลเวลาที่เข้า';
+ return `<section class="card"><div class="card-head"><h2>🕒 สถิติตามช่วงเวลาเข้าออเดอร์</h2><span class="small muted">เวลาไทย · ช่วงละ 4 ชั่วโมง</span></div>
+ <p class="analysis-note">ใช้เวลาเข้าออเดอร์หลังปรับเป็นเวลาไทย และแบ่งเป็น 00–03, 04–07, 08–11, 12–15, 16–19 และ 20–23 น. “ดีที่สุด/แย่ที่สุด” จัดอันดับจากกำไรสุทธิรวมในช่วงข้อมูลและพอร์ตที่เลือก ส่วนกำไรเฉลี่ยต่อไม้ช่วยเทียบช่วงที่จำนวนออเดอร์ต่างกัน</p>
+ <div class="grid2" style="margin-bottom:10px"><div class="tile"><span class="l">${best?(best.m.net>0?'ช่วงกำไรรวมดีที่สุด':best.m.net<0?'ช่วงขาดทุนน้อยที่สุด':'ช่วงกำไรรวมสูงสุด'):'ช่วงที่มีผลตอบแทนดีที่สุด'}</span><span class="v pos" style="font-size:16px">${esc(best?.label||'—')}</span><span class="s">${esc(best?signed(best.m.net,cur):'ไม่มีข้อมูล')} · ${best?best.m.total+' ไม้':''}</span></div><div class="tile"><span class="l">${worst?(worst.m.net<0?'ช่วงขาดทุนรวมมากที่สุด':worst.m.net>0?'ช่วงกำไรรวมน้อยที่สุด':'ช่วงกำไรรวมต่ำสุด'):'ช่วงที่มีผลตอบแทนแย่ที่สุด'}</span><span class="v neg" style="font-size:16px">${esc(worst?.label||'—')}</span><span class="s">${esc(worst?signed(worst.m.net,cur):'ไม่มีข้อมูล')} · ${worst?worst.m.total+' ไม้':''}</span></div></div>
+ ${rows.length?`<div class="table-wrap"><table class="table"><thead><tr><th>เวลาเข้า (ไทย)</th><th>จำนวนไม้</th><th>Win rate</th><th>กำไรสุทธิ</th><th>เฉลี่ยต่อไม้</th><th>Profit Factor</th></tr></thead><tbody>${rows.map(r=>`<tr class="${r===best?'best-row':r===worst?'worst-row':''}"><td><b>${esc(r.label)}</b></td><td>${r.m.total}</td><td>${(r.m.winrate*100).toFixed(1)}%</td><td class="${r.m.net>=0?'pos':'neg'}"><b>${signed(r.m.net,cur)}</b></td><td class="${r.m.expectancy>=0?'pos':'neg'}">${signed(r.m.expectancy,cur)}</td><td>${Number.isFinite(r.m.profitFactor)?r.m.profitFactor.toFixed(2):'∞'}</td></tr>`).join('')}</tbody></table></div>`:'<div class="muted">ยังไม่มีข้อมูลออเดอร์</div>'}
+ <p class="analysis-note" style="margin-top:10px">ข้อควรระวัง: ใช้จำนวนตัวอย่างประกอบการตัดสินใจ ช่วงที่มีไม่กี่ออเดอร์อาจยังสรุปไม่ได้ว่าเป็นช่วงที่ได้เปรียบอย่างสม่ำเสมอ สถิตินี้อิง P&L ที่ปิดจริง ไม่ใช่ราคาไปได้ไกลสุดระหว่างถือออเดอร์</p></section>`;
+}
+
+function pipSizeManager(){
+ const usedSymbols=[...new Set([...(state.settings.pipSizeBySymbol?Object.keys(state.settings.pipSizeBySymbol):[]),...state.days.flatMap(d=>(d.trades||[]).map(t=>baseSymbol(t.symbol))).filter(Boolean)])].sort();
+ const row=(symbol='',size='')=>`<div class="formgrid pip-rule" style="padding:10px 0;border-bottom:1px solid var(--line);align-items:end"><label class="field"><span>Symbol (เช่น XAUUSD)</span><input data-pip-symbol value="${esc(symbol)}" placeholder="XAUUSD"></label><label class="field"><span>ราคาเปลี่ยนเท่าไร = 1 Pip</span><input data-pip-size type="number" min="0.00000001" step="any" value="${size!==''?esc(size):''}" placeholder="เช่น 0.01"></label></div>`;
+ const c=openModal(`<div class="modal-head"><h3>📐 ตั้งค่าขนาด Pip ต่อสินทรัพย์</h3><button class="iconbtn" data-pip-close>✕</button></div><p class="analysis-note">ขนาด Pip แตกต่างกันตามสัญลักษณ์และข้อกำหนดของโบรกเกอร์ ค่าเริ่มต้น: XAU/GOLD = 0.01, คู่ Forex 6 ตัวอักษรทั่วไป = 0.0001, คู่ที่ลงท้าย JPY = 0.01 และสินทรัพย์อื่น = 0.01 กรุณาตรวจสอบค่าของ Symbol ที่โบรกเกอร์ใช้</p><div id="pipRows">${usedSymbols.map(s=>row(s,(state.settings.pipSizeBySymbol||{})[s]??defaultPipSize(s))).join('')}</div><div class="row" style="margin-top:12px"><button class="btn" id="addPipRule">＋ เพิ่ม Symbol</button></div><div class="modal-foot"><button class="btn" data-pip-close>ยกเลิก</button><button class="btn primary" id="savePipRules">บันทึกขนาด Pip</button></div>`,true);
+ if(!usedSymbols.length)$('#pipRows',c).innerHTML=row('XAUUSD',0.01);
+ $$('[data-pip-close]',c).forEach(b=>b.onclick=closeModal);
+ $('#addPipRule',c).onclick=()=>$('#pipRows',c).insertAdjacentHTML('beforeend',row('',''));
+ $('#savePipRules',c).onclick=async()=>{
+  const next={};
+  for(const r of $$('.pip-rule',c)){
+   const s=baseSymbol($('[data-pip-symbol]',r).value),v=num($('[data-pip-size]',r).value);
+   if(!s&&!String($('[data-pip-size]',r).value||'').trim())continue;
+   if(!s||!(v>0)){toast('กรุณาระบุ Symbol และขนาด Pip ที่มากกว่า 0 ให้ครบ','err');return}
+   if(next[s]!==undefined){toast(`มี Symbol ${s} ซ้ำ กรุณาแก้ให้เหลือรายการเดียว`,'err');return}
+   next[s]=v;
+  }
+  state.settings.pipSizeBySymbol=next;await saveScalarSetting('pipSizeBySymbol',next);closeModal();toast('บันทึกขนาด Pip แล้ว','ok');render();
+ };
+}
+
 function href(view,date){location.hash=`#/${view}${date?'/'+date:''}`}
 function navButtons(){return `<button data-nav="diary" class="${state.view==='diary'?'on':''}">📝 ไดอารี่</button><button data-nav="dashboard" class="${state.view==='dashboard'?'on':''}">📊 สรุปผล</button><button data-nav="settings" class="${state.view==='settings'?'on':''}">⚙️ ตั้งค่า</button>`}
 async function render(){
@@ -245,8 +344,9 @@ function bindImages(root,date){root.addEventListener('click',async e=>{const del
 
 async function addImage(file,date,kind){await put('images',{id:uid(),date,kind,name:file.name,type:file.type,createdAt:Date.now(),blob:file});}
 async function tradeListHtml(trades,date){return sortTradesChronological(trades,date).map(t=>{
- const cur = isCent(t)?state.settings.currency+'c':state.settings.currency;
- return `<div class="trade-row"><div><div class="sym">${esc(t.symbol)}</div><div class="meta">${esc(t.entryTime||'')} → ${esc(t.exitTime||'')} · ${esc(t.side||'')} · ${Number(t.lots||0).toFixed(2)} lot</div></div><div><span class="pill">${esc(t.ticket||'')}</span><div class="meta">${esc(t.notes||'')}</div></div><div class="pl ${tradeNet(t)>=0?'pos':'neg'}">${signed(tradeNet(t),cur)}<div class="meta">${price3(t.entryPrice)} → ${price3(t.exitPrice)}</div><button class="btn small" data-edit="${t.id}" style="margin-top:5px">แก้ไข</button></div></div>`;
+ const cur = isCent(t)?state.settings.currency+'c':state.settings.currency,mv=tradeMovement(t);
+ const moveClass=mv?(mv.delta>0?'pos':mv.delta<0?'neg':''):'muted';
+ return `<div class="trade-row"><div><div class="sym">${esc(t.symbol)}</div><div class="meta">เข้า ${esc(tradeDateTimeLabel(t,'entry',t.date||date))} → ออก ${esc(tradeDateTimeLabel(t,'exit',t.date||date))} · ${esc(t.side||'')} · ${Number(t.lots||0).toFixed(2)} lot</div></div><div><span class="pill">${esc(t.ticket||'')}</span><div class="meta">${esc(t.notes||'')}</div></div><div class="pl ${tradeNet(t)>=0?'pos':'neg'}">${signed(tradeNet(t),cur)}<div class="meta">เข้า ${price3(t.entryPrice)} → ออก ${price3(t.exitPrice)}</div><div class="move ${moveClass}">Δ ${mv?signedFixed(mv.delta,3):'—'} · ${mv?signedFixed(mv.pips,1)+' pips':'—'}</div><button class="btn small" data-edit="${t.id}" style="margin-top:5px">แก้ไข</button></div></div>`;
 }).join('')||'<div class="muted">ยังไม่มีออเดอร์วันนี้</div>'}
 
 async function diary(app){
@@ -287,7 +387,7 @@ async function diary(app){
  <label class="field"><span>Setup วันนี้เป็นยังไง</span><textarea data-bind="plan.setup" placeholder="เช่น ราคาอยู่ในโซน demand H4, รอ break structure ใน M15 แล้วค่อยเข้า…">${esc(d.plan.setup)}</textarea></label>
  <div class="grid2"><label class="field"><span>เงื่อนไขเข้า / ออก</span><textarea data-bind="plan.entryRules" placeholder="เข้าเมื่อ… ออกเมื่อ… SL ที่… TP ที่…">${esc(d.plan.entryRules)}</textarea></label><label class="field"><span>ความเสี่ยง / lot / ข่าว</span><textarea data-bind="plan.riskNotes" placeholder="เสี่ยง 1% ต่อไม้, ข่าว NFP…">${esc(d.plan.riskNotes)}</textarea></label></div>
  <div><div class="small muted" style="margin-bottom:7px">รูปกราฟที่วาดไว้</div><div class="imgs" id="planImgs">${imagesHtml(planImgs,'plan')}</div></div></div></section>
- <section class="card"><div class="card-head"><div><h2>📈 ออเดอร์วันนี้</h2><div class="small muted">เรียงตามวัน-เวลาเข้าออเดอร์ จากเก่า → ใหม่</div></div><div class="row"><button class="btn soft small" id="readMT5">📷 อ่านจาก MT5</button><button class="btn small" id="addTrade">＋ เพิ่ม</button></div></div>
+ <section class="card"><div class="card-head"><div><h2>📈 ออเดอร์วันนี้</h2><div class="small muted">เรียงตามวัน-เวลาเข้าออเดอร์ จากเก่า → ใหม่ · แสดงวัน/เวลาเข้า-ออกครบถ้วน (เวลาไทย)</div></div><div class="row"><button class="btn soft small" id="readMT5">📷 อ่านจาก MT5</button><button class="btn small" id="addTrade">＋ เพิ่ม</button></div></div>
  ${tilesHtml}
  <div id="tradeList">${await tradeListHtml(d.trades,state.date)}</div>
  <details style="margin-top:12px" ${mt5Imgs.length?'open':''}><summary>ภาพหน้าจอ MT5 ที่บันทึกไว้</summary><div class="imgs" id="mt5Imgs" style="margin-top:8px">${imagesHtml(mt5Imgs,'mt5')}</div></details>
@@ -317,13 +417,13 @@ function tradeModal(existing=null){
  <form id="tradeForm" class="formgrid"><label class="field"><span>คู่เงิน / Symbol</span><input name="symbol" required value="${esc(t.symbol)}"></label><label class="field"><span>ฝั่ง</span><select name="side"><option value="buy" ${t.side==='buy'?'selected':''}>Buy</option><option value="sell" ${t.side==='sell'?'selected':''}>Sell</option></select></label>
  <label class="field"><span>Lot</span><input name="lots" required type="number" step="any" value="${esc(t.lots)}"></label><label class="field"><span>Ticket</span><input name="ticket" value="${esc(t.ticket||'')}"></label>
  <label class="field"><span>ราคาเข้า (3 ตำแหน่ง)</span><input name="entryPrice" type="number" step="0.001" value="${t.entryPrice==='' ? '' : price3(t.entryPrice)}"></label><label class="field"><span>ราคาออก (3 ตำแหน่ง)</span><input name="exitPrice" type="number" step="0.001" value="${t.exitPrice==='' ? '' : price3(t.exitPrice)}"></label>
- <label class="field"><span>เวลาเข้า</span><input name="entryTime" value="${esc(t.entryTime||'')}" placeholder="09:30"></label><label class="field"><span>เวลาออก</span><input name="exitTime" value="${esc(t.exitTime||'')}" placeholder="11:40"></label>
+ <label class="field"><span>วันที่เข้า (เวลาไทย)</span><input value="${esc(tradeDateLabel(t,'entry',state.date))}" readonly></label><label class="field"><span>เวลาเข้า (เวลาไทย)</span><input name="entryTime" value="${esc(t.entryTime||'')}" placeholder="09:30"></label><label class="field"><span>วันที่ออก (เวลาไทย)</span><input value="${esc(tradeDateLabel(t,'exit',state.date))}" readonly></label><label class="field"><span>เวลาออก (เวลาไทย)</span><input name="exitTime" value="${esc(t.exitTime||'')}" placeholder="11:40"></label>
  <label class="field"><span>SL</span><input name="sl" type="number" step="any" value="${esc(t.sl)}"></label><label class="field"><span>TP</span><input name="tp" type="number" step="any" value="${esc(t.tp)}"></label>
  <label class="field"><span>P&L</span><input name="pnl" required type="number" step="any" value="${esc(t.pnl)}"></label><label class="field"><span>ค่าคอม</span><input name="commission" type="number" step="any" value="${esc(t.commission)}"></label>
  <label class="field"><span>Swap</span><input name="swap" type="number" step="any" value="${esc(t.swap)}"></label><div></div>
  <label class="field"><span>แผนเข้าเทรด / Setup</span>${setupSelect('setup',t.setup||'')}</label>
  <label class="field"><span>Setup อื่น ๆ</span><input name="setupCustom" placeholder="ใช้เมื่อเลือก เพิ่มใหม่"></label>
- <label class="field full"><span>โน้ต (เหตุผล / อารมณ์ / execution)</span><textarea name="notes">${esc(t.notes||'')}</textarea></label></form>
+ <div class="field full small muted" style="line-height:1.5">วันที่เข้า/ออกแสดงตามข้อมูล CSV หรือ Gemini หลังปรับเป็นเวลาไทยแล้ว ส่วนเวลาเข้า/ออกแก้ไขได้ที่ช่องด้านบน</div><label class="field full"><span>โน้ต (เหตุผล / อารมณ์ / execution)</span><textarea name="notes">${esc(t.notes||'')}</textarea></label></form>
  <div class="modal-foot">${existing?'<button class="btn danger" id="delTrade">ลบ</button>':''}<button class="btn" data-x>ยกเลิก</button><button class="btn primary" id="saveTrade">บันทึก</button></div>`);
  $$('[data-x]',c).forEach(b=>b.onclick=closeModal);
  $('#saveTrade',c).onclick=async()=>{const f=$('#tradeForm');if(!f.reportValidity())return;const fd=new FormData(f);let setup=String(fd.get('setup')||'');const custom=String(fd.get('setupCustom')||'').trim();if(setup==='__OTHER__')setup=custom;
@@ -390,14 +490,14 @@ function parseDatePart(value,fallbackDate){
 }
 function parseDateTimeParts(dateValue,timeValue,fallbackDate){
  const raw=String(dateValue??'').trim();const timeRaw=String(timeValue??'').trim();const combined=[raw,timeRaw].filter(Boolean).join(' ');
- let d=parseDatePart(raw,fallbackDate),t='';
+ let d=parseDatePart(raw,fallbackDate),t='',dateFound=!!parseDatePart(raw,'');
  let m=combined.match(/(\d{4})[.\/-](\d{1,2})[.\/-](\d{1,2})[^0-9]+(\d{1,2}):(\d{2})(?::(\d{2}))?/);
- if(m){d=`${m[1]}-${String(m[2]).padStart(2,'0')}-${String(m[3]).padStart(2,'0')}`;t=`${String(m[4]).padStart(2,'0')}:${m[5]}${m[6]?':'+m[6]:''}`;return {date:d,time:t,raw:combined};}
+ if(m){d=`${m[1]}-${String(m[2]).padStart(2,'0')}-${String(m[3]).padStart(2,'0')}`;t=`${String(m[4]).padStart(2,'0')}:${m[5]}${m[6]?':'+m[6]:''}`;return {date:d,time:t,raw:combined,dateFound:true};}
  m=combined.match(/(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{4})[^0-9]+(\d{1,2}):(\d{2})(?::(\d{2}))?/);
- if(m){d=`${m[3]}-${String(m[2]).padStart(2,'0')}-${String(m[1]).padStart(2,'0')}`;t=`${String(m[4]).padStart(2,'0')}:${m[5]}${m[6]?':'+m[6]:''}`;return {date:d,time:t,raw:combined};}
+ if(m){d=`${m[3]}-${String(m[2]).padStart(2,'0')}-${String(m[1]).padStart(2,'0')}`;t=`${String(m[4]).padStart(2,'0')}:${m[5]}${m[6]?':'+m[6]:''}`;return {date:d,time:t,raw:combined,dateFound:true};}
  m=combined.match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/);if(m)t=`${String(m[1]).padStart(2,'0')}:${m[2]}${m[3]?':'+m[3]:''}`;
- if(!t && /^\d{4}-\d{2}-\d{2}$/.test(raw))return {date:raw,time:'',raw:combined};
- return {date:d,time:t,raw:combined};
+ if(!t && /^\d{4}-\d{2}-\d{2}$/.test(raw))return {date:raw,time:'',raw:combined,dateFound:true};
+ return {date:d,time:t,raw:combined,dateFound};
 }
 function shiftWallDateTime(date,time,offsetMinutes){
  if(!date||!time)return {date:date||'',time:time||''};
@@ -406,10 +506,10 @@ function shiftWallDateTime(date,time,offsetMinutes){
  return {date:`${dt.getUTCFullYear()}-${String(dt.getUTCMonth()+1).padStart(2,'0')}-${String(dt.getUTCDate()).padStart(2,'0')}`,time:`${String(dt.getUTCHours()).padStart(2,'0')}:${String(dt.getUTCMinutes()).padStart(2,'0')}${m[3]?':'+String(dt.getUTCSeconds()).padStart(2,'0'):''}`};
 }
 function normalizeImportedTrade(raw,fallbackDate=state.date,source='file'){
- const entryDateRaw=firstField(raw,['entryDate','openDate','dateOpen','Open Date','opening_date','วันที่เปิด','วันที่เข้า']);
- const exitDateRaw=firstField(raw,['exitDate','closeDate','dateClose','Close Date','closing_date','วันที่ปิด','วันที่ออก']);
- const entryTimeRaw=firstField(raw,['opening_time_utc','opening_time','entryAt','openDateTime','Open Time','Entry Time','entryTime','เวลาเข้า','เวลาเปิด','Open']);
- const exitTimeRaw=firstField(raw,['closing_time_utc','closing_time','exitAt','closeDateTime','Close Time','Exit Time','exitTime','เวลาออก','เวลาปิด','Close']);
+ const entryDateRaw=firstField(raw,['entryDate','entry_date','openDate','dateOpen','Open Date','opening_date','open_date','วันที่เปิด','วันที่เข้า']);
+ const exitDateRaw=firstField(raw,['exitDate','exit_date','closeDate','dateClose','Close Date','closing_date','close_date','วันที่ปิด','วันที่ออก']);
+ const entryTimeRaw=firstField(raw,['opening_time_utc','opening_time','entryAt','entryDateTime','openDateTime','open_time_utc','Open Time','Entry Time','entryTime','เวลาเข้า','เวลาเปิด','Open']);
+ const exitTimeRaw=firstField(raw,['closing_time_utc','closing_time','exitAt','exitDateTime','closeDateTime','close_time_utc','Close Time','Exit Time','exitTime','เวลาออก','เวลาปิด','Close']);
  const genericTime=firstField(raw,['Date Time','Datetime','Time','เวลา']);
  const entrySource=entryTimeRaw||genericTime;const exitSource=exitTimeRaw;
  const ep=parseDateTimeParts(entryDateRaw,entrySource,fallbackDate);const xp=parseDateTimeParts(exitDateRaw,exitSource,ep.date||fallbackDate);
@@ -432,7 +532,7 @@ function normalizeImportedTrade(raw,fallbackDate=state.date,source='file'){
  const equity=parseNumFlexible(firstField(raw,['equity','Equity']));
  const marginLevel=parseNumFlexible(firstField(raw,['margin_level','Margin Level','MarginLevel']));
  const journalDate=xa.date||ea.date||fallbackDate;
- return {symbol,side,lots,originalPositionSize,entryPrice,exitPrice,pnl,commission,swap,ticket,sl,tp,setup,notes,closeReason,equity,marginLevel,entryTime:ea.time,exitTime:xa.time,entryDate:ea.date,exitDate:xa.date,journalDate,rawEntryTime:entrySource,rawExitTime:exitSource,rawEntryDate:entryDateRaw,rawExitDate:exitDateRaw,timeAdjustedMinutes:offset,importSource:source};
+ return {symbol,side,lots,originalPositionSize,entryPrice,exitPrice,pnl,commission,swap,ticket,sl,tp,setup,notes,closeReason,equity,marginLevel,entryTime:ea.time,exitTime:xa.time,entryDate:ea.date,exitDate:xa.date,entryDateKnown:!!ep.dateFound,exitDateKnown:!!xp.dateFound,journalDate,rawEntryTime:entrySource,rawExitTime:exitSource,rawEntryDate:entryDateRaw,rawExitDate:exitDateRaw,timeAdjustedMinutes:offset,importSource:source};
 }
 
 function validImportedTrade(t){return !!(t.symbol||t.ticket) && (t.symbol||t.side||t.lots||t.entryTime||t.exitTime||t.pnl||t.entryPrice||t.exitPrice);}
@@ -466,8 +566,9 @@ function buildAITradePrompt(count){return `อ่านประวัติอ�
 - side ใช้ buy หรือ sell.
 - lots, entryPrice, exitPrice, pnl, commission, swap, sl, tp เป็นตัวเลข; ถ้ามองไม่เห็นให้ใช้ 0.
 - ticket เป็นข้อความ.
-- entryAt/exitAt ให้คืนวันเวลา "ตามที่เห็นในภาพ" ก่อนปรับเวลา. ถ้ามีวันให้ใช้ YYYY-MM-DD HH:MM:SS. ถ้ามีเฉพาะเวลาให้เว้นวันที่เป็นค่าว่าง.
-- entryTime/exitTime ให้เป็น HH:MM:SS ตามภาพ.
+- entryAt/exitAt ให้คืนวันและเวลาฉบับเต็มตามที่เห็นในภาพ ก่อนปรับเวลา เช่น YYYY-MM-DD HH:MM:SS.
+- entryDate/exitDate ให้คืนวันที่ YYYY-MM-DD ตามแถวเดียวกัน หากภาพมีวันที่แยกคอลัมน์กับเวลาให้จับคู่ให้ถูกต้อง; ถ้าไม่เห็นวันที่จริงให้คืนสตริงว่าง ห้ามเดาวันจากวันปัจจุบัน.
+- entryTime/exitTime ให้คืนเวลา HH:MM:SS ตามภาพด้วย แต่ระบบจะใช้ entryAt/exitAt หรือวันที่+เวลาแยกกันเพื่อสร้างวันเวลาที่สมบูรณ์.
 - ห้ามเดาค่าที่ไม่เห็น.
 - ระบบจะเป็นผู้ปรับเวลา MT5 → เวลาไทย +${(getTimeOffsetMinutes()/60)} ชั่วโมงตอนบันทึก.
 `}
@@ -477,7 +578,7 @@ function geminiModelOptions(){return [
  {id:'gemini-3.1-pro-preview',label:'Gemini 3.1 Pro'}
 ]}
 function geminiModelLabel(id){return geminiModelOptions().find(x=>x.id===id)?.label||id}
-function geminiResponseSchema(){return {type:'object',properties:{trades:{type:'array',items:{type:'object',properties:{symbol:{type:'string'},side:{type:'string'},lots:{type:'number'},entryPrice:{type:'number'},exitPrice:{type:'number'},entryAt:{type:'string'},exitAt:{type:'string'},entryTime:{type:'string'},exitTime:{type:'string'},pnl:{type:'number'},commission:{type:'number'},swap:{type:'number'},ticket:{type:'string'},sl:{type:'number'},tp:{type:'number'},setup:{type:'string'},notes:{type:'string'}},required:['symbol','side','lots','entryPrice','exitPrice','entryAt','exitAt','entryTime','exitTime','pnl','commission','swap','ticket','sl','tp','setup','notes']}}},required:['trades']}}
+function geminiResponseSchema(){return {type:'object',properties:{trades:{type:'array',items:{type:'object',properties:{symbol:{type:'string'},side:{type:'string'},lots:{type:'number'},entryPrice:{type:'number'},exitPrice:{type:'number'},entryDate:{type:'string'},exitDate:{type:'string'},entryAt:{type:'string'},exitAt:{type:'string'},entryTime:{type:'string'},exitTime:{type:'string'},pnl:{type:'number'},commission:{type:'number'},swap:{type:'number'},ticket:{type:'string'},sl:{type:'number'},tp:{type:'number'},setup:{type:'string'},notes:{type:'string'}},required:['symbol','side','lots','entryPrice','exitPrice','entryDate','exitDate','entryAt','exitAt','entryTime','exitTime','pnl','commission','swap','ticket','sl','tp','setup','notes']}}},required:['trades']}}
 function parseGeminiJson(text){const raw=String(text??'').trim();try{return JSON.parse(raw)}catch(_){const fenced=raw.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);if(fenced)try{return JSON.parse(fenced[1])}catch(e){}const a=raw.indexOf('{'),b=raw.lastIndexOf('}');if(a>=0&&b>a)try{return JSON.parse(raw.slice(a,b+1))}catch(e){}throw new Error('Gemini ส่งข้อมูล JSON ที่อ่านไม่ได้ กรุณาลองใหม่อีกครั้ง')}}
 async function geminiGenerate(model,key,parts){
  const endpoint=`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`;
@@ -505,7 +606,7 @@ async function aiParseImages(c,imagesList){
 }
 async function selectParsed(trades,title='ตรวจสอบรายการจากไฟล์'){
  trades=sortTradesChronological(trades,state.date);
- const c=openModal(`<div class="modal-head"><h3>${esc(title)}</h3><button class="iconbtn" data-x>✕</button></div><div class="progress-note">พบ ${trades.length} รายการ · เลือกเฉพาะรายการที่ต้องการบันทึกได้ · วัน/เวลาที่แสดงเป็น <b>หลังปรับเวลาไทย ${getTimeOffsetMinutes()>=0?'+':''}${(getTimeOffsetMinutes()/60)}</b> ชม.</div><div class="preview-wrap"><table class="table"><thead><tr><th></th><th>วันที่</th><th>Symbol</th><th>Side</th><th>Lot</th><th>เข้า</th><th>ออก</th><th>P&L</th><th>Ticket</th></tr></thead><tbody>${trades.map((t,i)=>`<tr><td><input type="checkbox" data-p="${i}" checked></td><td>${esc(t.journalDate||'')}</td><td>${esc(t.symbol)}</td><td>${esc(t.side)}</td><td>${num(t.lots).toFixed(2)}</td><td>${esc(t.entryTime||'')}</td><td>${esc(t.exitTime||'')}</td><td class="${num(t.pnl)>=0?'pos':'neg'}">${num(t.pnl).toFixed(2)}</td><td>${esc(t.ticket||'')}</td></tr>`).join('')}</tbody></table></div><div class="modal-foot"><button class="btn" data-x>ยกเลิก</button><button class="btn primary" id="okParsed">เพิ่มรายการที่เลือก</button></div>`);
+ const c=openModal(`<div class="modal-head"><h3>${esc(title)}</h3><button class="iconbtn" data-x>✕</button></div><div class="progress-note">พบ ${trades.length} รายการ · เลือกเฉพาะรายการที่ต้องการบันทึกได้ · วัน/เวลาที่แสดงเป็น <b>หลังปรับเวลาไทย ${getTimeOffsetMinutes()>=0?'+':''}${(getTimeOffsetMinutes()/60)}</b> ชม.</div><div class="preview-wrap"><table class="table"><thead><tr><th></th><th>วันลงไดอารี่</th><th>Symbol</th><th>Side</th><th>Lot</th><th>เข้า (วัน/เวลาไทย)</th><th>ออก (วัน/เวลาไทย)</th><th>P&amp;L</th><th>Ticket</th></tr></thead><tbody>${trades.map((t,i)=>`<tr><td><input type="checkbox" data-p="${i}" checked></td><td>${esc(t.journalDate||'')}</td><td>${esc(t.symbol)}</td><td>${esc(t.side)}</td><td>${num(t.lots).toFixed(2)}</td><td>${esc(tradeDateTimeLabel(t,'entry',t.journalDate))}</td><td>${esc(tradeDateTimeLabel(t,'exit',t.journalDate))}</td><td class="${num(t.pnl)>=0?'pos':'neg'}">${num(t.pnl).toFixed(2)}</td><td>${esc(t.ticket||'')}</td></tr>`).join('')}</tbody></table></div><div class="modal-foot"><button class="btn" data-x>ยกเลิก</button><button class="btn primary" id="okParsed">เพิ่มรายการที่เลือก</button></div>`);
  $$('[data-x]',c).forEach(b=>b.onclick=closeModal);return new Promise(resolve=>{$('#okParsed',c).onclick=()=>{const out=trades.filter((_,i)=>$(`[data-p="${i}"]`,c)?.checked);closeModal();resolve(out)}})
 }
 
@@ -566,8 +667,10 @@ async function dashboard(app){
  <section class="card"><div class="card-head"><h2>📈 กำไรสะสม</h2><span class="small muted">${eq.length} ออเดอร์</span></div><div class="chartbox">${drawLine(eq)}</div></section>
  <section class="card"><div class="card-head"><h2>📊 กำไร/ขาดทุน ${state.period==='day'?'ทีละออเดอร์':state.period==='year'?'รายเดือน':'รายวัน'}</h2></div><div class="chartbox">${drawBars(bars)}</div></section>
  ${state.period==='month'?`<section class="card"><div class="card-head"><h2>🗓️ ปฏิทิน</h2><span class="small muted">แตะวันเพื่อเปิดไดอารี่</span></div><div class="cal">${calHtml(parseDate(state.anchor).getFullYear(),parseDate(state.anchor).getMonth(),dayMap)}</div></section>`:''}${(()=>{const z=setupAnalytics(ts);return `<div class="grid2">${setupStatsTable('🏆 ผลงานแยกตาม Setup',z.setup,cur)}${setupStatsTable('🎯 Asset × Setup',z.matrix,cur)}</div>`})()}
- <div class="grid2">${groupTable('ตามช่วงเวลา',sub,cur)}${groupTable('ตามคู่เงิน',bySymbol,cur)}${groupTable('ตาม Buy / Sell',bySide,cur)}${groupTable('ตามวันในสัปดาห์',byDow,cur)}</div>
- <section class="card"><div class="card-head"><h2>📜 รายการออเดอร์</h2><span class="small muted">${tableTs.length} รายการ</span></div>${tableTs.length?`<div class="table-wrap"><table class="table"><thead><tr><th>วันที่</th><th>คู่เงิน</th><th>ฝั่ง</th><th>Lot</th><th>เข้า</th><th>ออก</th><th>กำไร</th></tr></thead><tbody>${[...tableTs].reverse().map(t=>`<tr class="clickable" data-open="${t.date}"><td class="muted">${t.date}</td><td><b>${esc(t.symbol)}</b></td><td>${esc(t.side)}</td><td>${num(t.lots).toFixed(2)}</td><td>${num(t.entryPrice)}</td><td>${num(t.exitPrice)}</td><td class="${tradeNet(t)>=0?'pos':'neg'}"><b>${signed(tradeNet(t),isCent(t)?state.settings.currency+'c':state.settings.currency)}</b></td></tr>`).join('')}</tbody></table></div>`:'<div class="muted">ไม่มีออเดอร์ในช่วงนี้</div>'}</section></div>`;
+ ${priceMovementTable(ts)}
+ ${timeOfDayTable(ts,cur)}
+ <div class="grid2">${groupTable('ตามวัน/สัปดาห์ในช่วงที่เลือก',sub,cur)}${groupTable('ตามคู่เงิน',bySymbol,cur)}${groupTable('ตาม Buy / Sell',bySide,cur)}${groupTable('ตามวันในสัปดาห์',byDow,cur)}</div>
+ <section class="card"><div class="card-head"><h2>📜 รายการออเดอร์</h2><span class="small muted">${tableTs.length} รายการ</span></div>${tableTs.length?`<div class="table-wrap"><table class="table"><thead><tr><th>วันที่</th><th>คู่เงิน</th><th>ฝั่ง</th><th>Lot</th><th>ราคาเข้า<br><span class="subcell">วันที่/เวลาไทย</span></th><th>ราคาออก<br><span class="subcell">วันที่/เวลาไทย</span></th><th>Δ ราคา</th><th>Pips</th><th>กำไร</th></tr></thead><tbody>${[...tableTs].reverse().map(t=>{const mv=tradeMovement(t);return `<tr class="clickable" data-open="${t.date}"><td class="muted">${t.date}</td><td><b>${esc(t.symbol)}</b></td><td>${esc(t.side)}</td><td>${num(t.lots).toFixed(2)}</td><td>${price3(t.entryPrice)}<span class="subcell">${esc(tradeDateTimeLabel(t,'entry',t.date))}</span></td><td>${price3(t.exitPrice)}<span class="subcell">${esc(tradeDateTimeLabel(t,'exit',t.date))}</span></td><td class="${mv?(mv.delta>0?'pos':mv.delta<0?'neg':''):''}">${mv?signedFixed(mv.delta,3):'—'}</td><td class="${mv?(mv.pips>0?'pos':mv.pips<0?'neg':''):''}">${mv?signedFixed(mv.pips,1):'—'}</td><td class="${tradeNet(t)>=0?'pos':'neg'}"><b>${signed(tradeNet(t),isCent(t)?state.settings.currency+'c':state.settings.currency)}</b></td></tr>`}).join('')}</tbody></table></div>`:'<div class="muted">ไม่มีออเดอร์ในช่วงนี้</div>'}</section></div>`;
  $$('[data-period]').forEach(b=>b.onclick=()=>{state.period=b.dataset.period;render()});$('#shiftL').onclick=()=>{state.anchor=shift(state.period,state.anchor,-1);render()};$('#shiftR').onclick=()=>{state.anchor=shift(state.period,state.anchor,1);render()};$('#dashToday').onclick=()=>{state.anchor=today();render()};$$('[data-cal]').forEach(b=>b.onclick=()=>href('diary',b.dataset.cal));$$('[data-open]').forEach(b=>b.onclick=()=>href('diary',b.dataset.open));$('#exportTop').onclick=exportBackup;$('#importTop').onclick=importBackup;
  $$('[data-portf]').forEach(b=>b.onclick=()=>{state.portFilter=b.dataset.portf;render()});
 }
@@ -575,9 +678,10 @@ async function settings(app){
  const s=state.settings;
  app.innerHTML=`<div class="stack"><div class="top"><h1>⚙️ ตั้งค่า</h1><div class="top-actions"><button class="btn" id="exportSet">⬇ สำรองข้อมูล</button><button class="btn" id="importSet">⬆ นำเข้า</button></div></div>
  <section class="card"><div class="card-head"><h2>ทั่วไป</h2></div><div class="formgrid"><label class="field"><span>ธีม</span><select id="theme"><option value="dark" ${s.theme==='dark'?'selected':''}>🌙 กลางคืน</option><option value="light" ${s.theme==='light'?'selected':''}>☀️ กลางวัน</option></select></label><label class="field"><span>สกุลเงินบัญชี</span><input id="currency" value="${esc(s.currency||'USD')}" placeholder="USD / THB"></label><label class="field"><span>ยอดเริ่มต้นบัญชี (ไว้ดูภาพรวม)</span><input id="startingBalance" type="number" step="any" value="${esc(s.startingBalance||'')}"></label><label class="field"><span>ชื่อโฟลเดอร์ Drive</span><input id="driveFolderName" value="${esc(s.driveFolderName||'Trade Memo')}"></label><label class="field"><span>ปรับเวลาจาก MT5 → เวลาไทย (ชั่วโมง)</span><input id="timeOffsetHours" type="number" step="0.5" value="${(getTimeOffsetMinutes()/60).toString()}" placeholder="เช่น 7 หรือ -2.5"></label></div><div class="small muted" style="margin-top:8px">ระบบจะปรับ <b>วันที่ + เวลา</b> ตอนนำเข้าออเดอร์จากภาพ, CSV และ Excel เช่น 10:30 +7 ชม. → 17:30 และถ้าข้ามเที่ยงคืน ระบบจะเปลี่ยนวันที่ให้อัตโนมัติด้วย</div></section>
+ <section class="card"><div class="card-head"><h2>📐 การคำนวณ Pips</h2><button class="btn small" id="managePips">ตั้งค่า Pip ต่อสินทรัพย์</button></div><div class="small muted" style="line-height:1.7">ค่าเริ่มต้น: XAU/GOLD ใช้ 1 pip = 0.01, คู่ Forex ทั่วไปใช้ 0.0001 และคู่ JPY ใช้ 0.01 ส่วนสินทรัพย์ CFD อื่นอาจแตกต่างตามโบรกเกอร์ สามารถกำหนดเองแยกตาม Symbol ได้ ค่าที่ตั้งจะแสดงใน Diary และสรุปผล และจะรวมไปกับ Backup / Google Drive Sync</div></section>
  <section class="card"><div class="card-head"><h2>🧩 แผนเข้าเทรด / Setup</h2><button class="btn small" id="manageSetups">จัดการ</button></div><div class="small muted" style="line-height:1.7">รายการเริ่มต้น: QM, Double Top, Double Bottom, M Pattern, W Pattern, Liquidity Sweep, BOS / CHoCH และเพิ่มแผนของคุณเองได้</div></section>
  <section class="card"><div class="card-head"><h2>☁️ Google Drive</h2><span class="small muted">${s.lastSync?`ซิงค์ล่าสุด ${new Date(s.lastSync).toLocaleString('th-TH')}`:'ยังไม่เคยซิงค์'}</span></div><div class="stack"><label class="field"><span>OAuth Client ID</span><input id="driveClientId" value="${esc(s.driveClientId||'')}" placeholder="xxxx.apps.googleusercontent.com"></label><div class="row"><button class="btn primary" id="syncNow">☁️ ซิงค์เดี๋ยวนี้</button><button class="btn" id="driveOut">ออกจาก Google</button></div><details><summary>วิธีตั้งค่า Google Drive</summary><div class="small muted" style="margin-top:8px;line-height:1.7">สร้างโปรเจกต์ใน Google Cloud Console → เปิด Google Drive API → OAuth consent screen → เพิ่มบัญชีของคุณเป็น Test user → สร้าง OAuth Client ID แบบ Web application → ใส่ Authorized JavaScript origins เป็น <code>${esc(location.origin)}</code> → นำ Client ID มาวางตรงนี้ สิทธิ์ที่แอปขอคือ <code>drive.file</code></div></details></div></section>
- <section class="card"><div class="card-head"><h2>🤖 อ่านภาพ MT5 ด้วย Gemini</h2></div><div class="formgrid"><label class="field full"><span>Gemini API key</span><input id="geminiKey" type="password" value="${esc(s.geminiKey||'')}" placeholder="AIza…" autocomplete="off"></label><label class="field full"><span>Gemini model</span><select id="geminiModel">${geminiModelOptions().map(m=>`<option value="${m.id}" ${s.geminiModel===m.id?'selected':''}>${m.label} · ${m.id}</option>`).join('')}<option value="custom" ${!geminiModelOptions().some(m=>m.id===s.geminiModel)?'selected':''}>กำหนด Model ID เอง</option></select></label></div><div id="customGeminiModelWrap" class="field" style="margin-top:12px;display:none"><span>Gemini Model ID แบบกำหนดเอง</span><input id="customGeminiModel" value="${!geminiModelOptions().some(m=>m.id===s.geminiModel)?esc(s.geminiModel||''):''}" placeholder="เช่น gemini-3.8-flash"></div><div class="notice" style="margin-top:12px">V5 ใช้ Gemini เป็น AI อ่านภาพเพียงตัวเดียว และบังคับรูปแบบ JSON สำหรับการดึงข้อมูล Order เพื่อลดปัญหา JSON เสียจากรุ่นก่อน</div></section>
+ <section class="card"><div class="card-head"><h2>🤖 อ่านภาพ MT5 ด้วย Gemini</h2></div><div class="formgrid"><label class="field full"><span>Gemini API key</span><input id="geminiKey" type="password" value="${esc(s.geminiKey||'')}" placeholder="AIza…" autocomplete="off"></label><label class="field full"><span>Gemini model</span><select id="geminiModel">${geminiModelOptions().map(m=>`<option value="${m.id}" ${s.geminiModel===m.id?'selected':''}>${m.label} · ${m.id}</option>`).join('')}<option value="custom" ${!geminiModelOptions().some(m=>m.id===s.geminiModel)?'selected':''}>กำหนด Model ID เอง</option></select></label></div><div id="customGeminiModelWrap" class="field" style="margin-top:12px;display:none"><span>Gemini Model ID แบบกำหนดเอง</span><input id="customGeminiModel" value="${!geminiModelOptions().some(m=>m.id===s.geminiModel)?esc(s.geminiModel||''):''}" placeholder="เช่น gemini-3.8-flash"></div><div class="notice" style="margin-top:12px">ระบบใช้ Gemini เป็น AI อ่านภาพเพียงตัวเดียว และบังคับรูปแบบ JSON สำหรับการดึงข้อมูล Order เพื่อลดปัญหา JSON เสียจากรุ่นก่อน</div></section>
  <section class="card"><div class="card-head"><h2>🔒 ความเป็นส่วนตัว</h2></div><div class="small muted" style="line-height:1.7">โหมดปกติ: IndexedDB ใน browser • ไม่มี Analytics • ไม่มี database ของผู้พัฒนา • Backup เป็นไฟล์ JSON ของคุณเอง • Google Drive และ AI เป็นการเชื่อมต่อเสริมที่คุณเปิดใช้เอง • อย่าเก็บ MT5 password, broker password, API secret, private key หรือ seed phrase ในแอป</div></section></div>`;
  $('#theme').onchange=e=>{s.theme=e.target.value;document.documentElement.dataset.theme=s.theme;put('settings',{key:'theme',value:s.theme})};
  [['currency','currency'],['startingBalance','startingBalance'],['driveClientId','driveClientId'],['driveFolderName','driveFolderName'],['geminiKey','geminiKey']].forEach(([id,k])=>{$('#'+id).addEventListener('change',async e=>{s[k]=id==='startingBalance'?num(e.target.value):e.target.value;await put('settings',{key:k,value:s[k]})})});
@@ -585,9 +689,9 @@ async function settings(app){
  $('#customGeminiModel').addEventListener('change',async e=>{const v=e.target.value.trim();if(!v)return;s.geminiModel=v;await saveScalarSetting('geminiModel',v);toast('บันทึก Gemini Model ID แล้ว','ok')});
  $('#customGeminiModelWrap').style.display=$('#geminiModel').value==='custom'?'grid':'none';
  $('#timeOffsetHours').addEventListener('change',async e=>{const minutes=Math.round(num(e.target.value)*60);s.timeOffsetMinutes=minutes;await saveScalarSetting('timeOffsetMinutes',minutes);toast(`ตั้งค่าเวลา MT5 → ไทย เป็น ${(minutes/60)} ชั่วโมง แล้ว`,'ok');render()});
- $('#exportSet').onclick=exportBackup;$('#importSet').onclick=importBackup;$('#syncNow').onclick=driveSync;$('#driveOut').onclick=driveSignOut;$('#manageSetups').onclick=setupManager;
+ $('#exportSet').onclick=exportBackup;$('#importSet').onclick=importBackup;$('#syncNow').onclick=driveSync;$('#driveOut').onclick=driveSignOut;$('#manageSetups').onclick=setupManager;$('#managePips').onclick=pipSizeManager;
 }
-function exportData(includeImages=true){return Promise.all([all('days'),all('images')]).then(async([days,imgs])=>{const safeSettings={};for(const k of ['currency','startingBalance','theme','driveFolderName','lastSymbol','setupOptions','timeOffsetMinutes','syncRevision'])if(state.settings[k]!==undefined)safeSettings[k]=state.settings[k];const out={version:4,app:'Trade Memo Private',exportedAt:new Date().toISOString(),settings:safeSettings,days,images:imgs.map(i=>({id:i.id,date:i.date,kind:i.kind,name:i.name,type:i.type,createdAt:i.createdAt})),imageData:{}};if(includeImages)for(const i of imgs)out.imageData[i.id]=await blob64(i.blob);return out})}
+function exportData(includeImages=true){return Promise.all([all('days'),all('images')]).then(async([days,imgs])=>{const safeSettings={};for(const k of ['currency','startingBalance','theme','driveFolderName','lastSymbol','setupOptions','timeOffsetMinutes','syncRevision','pipSizeBySymbol'])if(state.settings[k]!==undefined)safeSettings[k]=state.settings[k];const out={version:4,app:'Trade Memo Private',exportedAt:new Date().toISOString(),settings:safeSettings,days,images:imgs.map(i=>({id:i.id,date:i.date,kind:i.kind,name:i.name,type:i.type,createdAt:i.createdAt})),imageData:{}};if(includeImages)for(const i of imgs)out.imageData[i.id]=await blob64(i.blob);return out})}
 async function exportBackup(){try{const data=await exportData(true);const blob=new Blob([JSON.stringify(data)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`trade-memo-backup-${today()}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),4000);toast('ดาวน์โหลดไฟล์สำรองแล้ว','ok')}catch(e){toast('สำรองไม่สำเร็จ: '+e.message,'err')}}
 async function importBackup(){const i=document.createElement('input');i.type='file';i.accept='application/json';i.onchange=async()=>{const f=i.files[0];if(!f)return;try{const data=JSON.parse(await f.text());for(const d of data.days||[]){const local=await get('days',d.date);if(!local||num(d.updatedAt)>=num(local.updatedAt))await put('days',d)}for(const im of data.images||[]){if(await get('images',im.id))continue;const b64=data.imageData?.[im.id];if(!b64)continue;const bin=atob(b64),arr=new Uint8Array(bin.length);for(let j=0;j<bin.length;j++)arr[j]=bin.charCodeAt(j);await put('images',{...im,blob:new Blob([arr],{type:im.type||'image/png'})})}for(const [k,v] of Object.entries(data.settings||{}))await put('settings',{key:k,value:v});await loadData();render();toast('นำเข้าไฟล์สำรองเรียบร้อย','ok')}catch(e){toast('นำเข้าไม่สำเร็จ: '+e.message,'err')}};i.click()}
 
@@ -619,9 +723,9 @@ function mergeDays(localDays=[],remoteDays=[]){const map=new Map();for(const d o
 async function driveSync(){
  try{await driveToken();toast('กำลังอ่านข้อมูลล่าสุดจาก Google Drive…');const root=await driveResolveRoot();const files=await driveList(root);const df=files.find(f=>f.name==='trade-memo-data.json');const localData=await exportData(false);let remoteData=null;if(df)try{remoteData=JSON.parse(await driveDownload(df.id))}catch(_){remoteData=null}
   const mergedDays=mergeDays(localData.days,remoteData?.days||[]);for(const d of mergedDays)await put('days',d);state.days=mergedDays;
-  if(remoteData?.settings){const rs=remoteData.settings;for(const k of ['currency','startingBalance','driveFolderName','lastSymbol','setupOptions','timeOffsetMinutes','geminiModel'])if(rs[k]!==undefined)state.settings[k]=rs[k];state.settings.setupOptions=[...new Set([...setupOptions(),...(rs.setupOptions||[])])];await Promise.all(Object.entries(rs).filter(([k])=>!['driveRootId','driveImagesId','driveClientId','lastSync','syncRevision'].includes(k)).map(([k,v])=>put('settings',{key:k,value:v})))}
+  if(remoteData?.settings){const rs=remoteData.settings;for(const k of ['currency','startingBalance','driveFolderName','lastSymbol','setupOptions','timeOffsetMinutes','geminiModel'])if(rs[k]!==undefined)state.settings[k]=rs[k];state.settings.setupOptions=[...new Set([...setupOptions(),...(rs.setupOptions||[])])];state.settings.pipSizeBySymbol={...(state.settings.pipSizeBySymbol||{}),...(rs.pipSizeBySymbol||{})};await Promise.all(Object.entries(rs).filter(([k])=>!['driveRootId','driveImagesId','driveClientId','lastSync','syncRevision'].includes(k)).map(([k,v])=>put('settings',{key:k,value:k==='pipSizeBySymbol'?state.settings.pipSizeBySymbol:v})));await saveScalarSetting('pipSizeBySymbol',state.settings.pipSizeBySymbol)}
   state.settings.syncRevision=Math.max(Date.now(),num(remoteData?.settings?.syncRevision)+1);await saveScalarSetting('syncRevision',state.settings.syncRevision);
-  const imageMeta=[...new Map([...(remoteData?.images||[]),...(localData.images||[])].map(im=>[im.id,im])).values()];const merged={version:4,app:'Trade Memo Private',exportedAt:new Date().toISOString(),settings:{currency:state.settings.currency,startingBalance:state.settings.startingBalance,theme:state.settings.theme,driveFolderName:state.settings.driveFolderName,lastSymbol:state.settings.lastSymbol,setupOptions:setupOptions(),timeOffsetMinutes:state.settings.timeOffsetMinutes,syncRevision:state.settings.syncRevision,geminiModel:state.settings.geminiModel},days:mergedDays,images:imageMeta,imageData:{}};
+  const imageMeta=[...new Map([...(remoteData?.images||[]),...(localData.images||[])].map(im=>[im.id,im])).values()];const merged={version:4,app:'Trade Memo Private',exportedAt:new Date().toISOString(),settings:{currency:state.settings.currency,startingBalance:state.settings.startingBalance,theme:state.settings.theme,driveFolderName:state.settings.driveFolderName,lastSymbol:state.settings.lastSymbol,setupOptions:setupOptions(),timeOffsetMinutes:state.settings.timeOffsetMinutes,syncRevision:state.settings.syncRevision,geminiModel:state.settings.geminiModel,pipSizeBySymbol:state.settings.pipSizeBySymbol||{}},days:mergedDays,images:imageMeta,imageData:{}};
   const blob=new Blob([JSON.stringify(merged)],{type:'application/json'});if(df)await driveUpload({name:'trade-memo-data.json'},blob,df.id);else await driveUpload({name:'trade-memo-data.json',parents:[root]},blob);
   const imgFolder=await driveFolder('images',root);await saveScalarSetting('driveImagesId',imgFolder);const remoteImgs=await driveList(imgFolder),haveRemote=new Set(remoteImgs.map(f=>f.name));for(const im of await all('images')){const ext=(im.type||'image/png').split('/')[1].replace('jpeg','jpg'),name=`${im.id}.${ext}`;if(!haveRemote.has(name))await driveUpload({name,parents:[imgFolder]},im.blob)}
   const localImgs=await all('images'),haveLocal=new Set(localImgs.map(x=>x.id)),remoteMeta=new Map((remoteData?.images||[]).map(x=>[x.id,x]));for(const f of await driveList(imgFolder)){const m=f.name.match(/^(.+)\.(png|jpg|jpeg|webp|gif)$/i);if(!m||haveLocal.has(m[1]))continue;try{const b=await driveDownloadBlob(f.id),meta=remoteMeta.get(m[1])||{};await put('images',{id:m[1],date:meta.date||'',kind:meta.kind||'mt5',name:meta.name||f.name,type:meta.type||b.type||f.mimeType,createdAt:meta.createdAt||Date.now(),blob:b})}catch(_){} }
