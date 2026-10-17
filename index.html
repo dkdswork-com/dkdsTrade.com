@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0b1220">
 <meta name="description" content="Private, local-first trading journal">
 <link rel="manifest" href="manifest.json">
-<title>📓 Trade Memo Private V8</title>
+<title>📓 Trade Memo Private V9</title>
 <style>
 :root{
  --bg:#0b1220;--bg2:#0f1728;--card:#121c2f;--card2:#18243a;--line:#273652;
@@ -58,6 +58,9 @@ hr{border:0;border-top:1px solid var(--line);margin:4px 0}
 @media(max-width:1100px){.tiles{grid-template-columns:repeat(2,1fr)}.tile.hero{grid-column:span 2}.grid4{grid-template-columns:repeat(2,1fr)}}
 .import-files{display:flex;gap:8px;flex-wrap:wrap}.import-count{font-size:12px;color:var(--muted)}.preview-wrap{max-height:58vh;overflow:auto;border:1px solid var(--line);border-radius:12px}.progress-note{font-size:12px;color:var(--muted);padding:9px 0}@media(max-width:850px){.shell{grid-template-columns:1fr}.sidebar{position:sticky;bottom:0;top:auto;height:auto;z-index:90;border-right:0;border-top:1px solid var(--line);padding:7px}.brand,.side-note{display:none}.nav{grid-template-columns:repeat(3,1fr)}.nav button{text-align:center;padding:9px 6px;font-size:11px}.main{padding:14px}.grid2,.grid3{grid-template-columns:1fr}.dayhead{grid-template-columns:38px 1fr 38px}.dayhead input{grid-column:2}.periodnav .lbl{min-width:140px}.formgrid{grid-template-columns:1fr}}
 @media(max-width:560px){.tiles,.grid4{grid-template-columns:1fr}.tile.hero{grid-column:auto}.top{align-items:flex-start;flex-direction:column}.top-actions{width:100%}.weekstrip button{min-height:56px}.calcell{min-height:63px}.trade-row{grid-template-columns:70px 1fr}.trade-row .pl{grid-column:2;text-align:left}}
+
+.position-details{margin:8px 0;border:1px solid var(--line);border-radius:12px;background:var(--card);padding:0;overflow:hidden}.position-details>summary{list-style:disclosure-closed;padding:12px;background:var(--card2);color:var(--text)}.position-details[open]>summary{list-style:disclosure-open;border-bottom:1px solid var(--line)}.position-summary{display:grid;grid-template-columns:90px 1fr auto;gap:10px;align-items:center}.position-summary .p-title{font-weight:800}.position-summary .p-meta{font-size:11px;color:var(--muted);line-height:1.5}.position-summary .p-net{text-align:right;font-weight:850}.parts-table{width:100%;border-collapse:collapse;min-width:640px}.parts-table th,.parts-table td{font-size:11px;padding:8px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}.parts-table th{color:var(--muted);font-weight:600}.part-badges{display:flex;flex-wrap:wrap;gap:4px}.part-badge{font-size:10px;border:1px solid var(--line);border-radius:999px;padding:2px 6px;display:inline-block}.part-badge.full{color:var(--pos);border-color:color-mix(in srgb,var(--pos) 55%,var(--line))}.part-badge.partial{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 55%,var(--line))}.part-badge.overnight{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 55%,var(--line))}.sync-note{font-size:11px;color:var(--muted);margin-top:8px}
+
 </style>
 </head>
 <body>
@@ -95,7 +98,7 @@ const tradeChronologyKey=(t,fallbackDate='')=>{const d=String(t?.entryDate||t?.d
 const sortTradesChronological=(trades,fallbackDate='')=>[...(trades||[])].sort((a,b)=>tradeChronologyKey(a,fallbackDate).localeCompare(tradeChronologyKey(b,fallbackDate)));
 const uid=()=>crypto.randomUUID?crypto.randomUUID():`${Date.now()}-${Math.random().toString(36).slice(2)}`;
 const $=(q,r=document)=>r.querySelector(q), $$=(q,r=document)=>[...r.querySelectorAll(q)];
-const isCent = t => (t.symbol||'').trim().endsWith('c');
+const isCent = t => /c$/i.test(String(t?.symbol||'').trim());
 const getTimeOffsetMinutes = () => { const n=Number(state.settings.timeOffsetMinutes); return Number.isFinite(n)?n:DEFAULT_TIME_OFFSET_MINUTES; };
 const normHeader = s => String(s??'').trim().toLowerCase().replace(/[\s_\-./\\:()[\]{}]+/g,'');
 const firstField = (row, aliases) => { const keys=Object.keys(row); for(const a of aliases){ const na=normHeader(a); const k=keys.find(x=>normHeader(x)===na && String(row[x]??'').trim()!==''); if(k!==undefined) return row[k]; } return ''; };
@@ -165,6 +168,106 @@ function signedFixed(value,digits=3){
 function movementPair(m){return m?`${signedFixed(m.delta,3)} / ${signedFixed(m.pips,1)} pips`:'—';}
 
 function tradeNet(t){return num(t.pnl)+num(t.commission)+num(t.swap);}
+function flattenDayTrades(days=state.days){
+ return (days||[]).flatMap(d=>(d.trades||[]).map(t=>({...t,date:d.date,journalDate:d.date,exitDate:t.exitDate||d.date})));
+}
+function tradePositionKey(t){
+ if(t?.positionKey)return String(t.positionKey);
+ const positionId=String(t?.positionId||'').trim();
+ const ticket=String(t?.ticket||'').trim();
+ const symbol=String(t?.symbol||'').trim().toUpperCase();
+ const side=String(t?.side||'').trim().toLowerCase();
+ // An explicit Position ID is the strongest key; closing deal tickets and imperfect OCR fields may differ between partial exits.
+ if(positionId)return `position:${symbol}|${side}|position-id:${positionId}`;
+ if(!ticket)return `single:${String(t?.id||tradeFingerprint(t))}`;
+ const dateKnown=tradeSourceDateKnown(t,'entry');
+ const entryDate=dateKnown?String(t?.entryDate||t?.date||''):'unknown-date';
+ const entryTime=clock3(t?.entryTime)||'';
+ const entryPrice=t?.entryPrice!==undefined&&t?.entryPrice!==''?price3(t.entryPrice):'';
+ return `position:${symbol}|${side}|ticket:${ticket}|${entryDate}|${entryTime}|${entryPrice}`;
+}
+function compareClosePart(a,b){
+ const ad=String(a.exitDate||a.date||'9999-12-31'),bd=String(b.exitDate||b.date||'9999-12-31');
+ const at=clock3(a.exitTime)||'99:99:99',bt=clock3(b.exitTime)||'99:99:99';
+ return `${ad} ${at} ${String(a.ticket||'')}`.localeCompare(`${bd} ${bt} ${String(b.ticket||'')}`);
+}
+function dateDaySpan(a,b){
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(String(a||''))||!/^\d{4}-\d{2}-\d{2}$/.test(String(b||'')))return null;
+ return Math.round((Date.parse(`${b}T00:00:00Z`)-Date.parse(`${a}T00:00:00Z`))/86400000);
+}
+function groupPositionTrades(parts=[]){
+ const map=new Map();
+ for(const raw of parts){const key=tradePositionKey(raw);if(!map.has(key))map.set(key,[]);map.get(key).push({...raw,positionKey:key});}
+ const out=[];
+ for(const [key,items] of map){
+  items.sort(compareClosePart);
+  const sizes=items.map(t=>num(t.originalPositionSize)).filter(n=>n>0);
+  const sizeKnown=sizes.length>0,initialLots=sizeKnown?Math.max(...sizes):items.reduce((a,t)=>a+num(t.lots),0);
+  const closedLots=items.reduce((a,t)=>a+num(t.lots),0);
+  const complete=sizeKnown?closedLots>=initialLots-1e-8:items.length===1;
+  let cumulative=0,completionIndex=-1;
+  const decorated=items.map((t,i)=>{
+   cumulative+=num(t.lots);
+   if(sizeKnown&&completionIndex<0&&cumulative>=initialLots-1e-8)completionIndex=i;
+   return {...t,_partIndex:i,_cumulativeClosedLots:cumulative,_cumulativeClosedPct:sizeKnown&&initialLots>0?Math.min(100,cumulative/initialLots*100):null};
+  });
+  // Rebuild the completion index if the known initial size is only reached by the final/last recorded close.
+  let cum=0;completionIndex=-1;
+  if(sizeKnown){for(let i=0;i<decorated.length;i++){cum+=num(decorated[i].lots);if(cum>=initialLots-1e-8){completionIndex=i;break;}}}
+  const last=decorated[decorated.length-1]||{};
+  const first=decorated[0]||{};
+  const pnl=decorated.reduce((a,t)=>a+num(t.pnl),0),commission=decorated.reduce((a,t)=>a+num(t.commission),0),swap=decorated.reduce((a,t)=>a+num(t.swap),0);
+  const weightedLots=decorated.reduce((a,t)=>a+(num(t.lots)>0&&num(t.exitPrice)>0?num(t.lots):0),0);
+  const allHaveClose=decorated.every(t=>num(t.exitPrice)>0);
+  const weightedExit=allHaveClose&&weightedLots>0?decorated.reduce((a,t)=>a+num(t.exitPrice)*num(t.lots),0)/weightedLots:0;
+  const p={id:`position-${key}`,positionKey:key,date:first.entryDate||first.date||'',ticket:first.ticket||last.ticket||'',symbol:first.symbol||last.symbol||'',side:first.side||last.side||'',setup:first.setup||'',notes:first.notes||'',sl:first.sl,tp:first.tp,entryDate:first.entryDate||first.date||'',entryTime:first.entryTime||'',entryDateKnown:tradeSourceDateKnown(first,'entry'),entryPrice:num(first.entryPrice),exitDate:last.exitDate||last.date||'',exitTime:last.exitTime||'',exitPrice:weightedExit,
+   pnl,commission,swap,lots:initialLots,originalPositionSize:sizeKnown?initialLots:0,closedLots,closedPercent:sizeKnown&&initialLots>0?Math.min(100,closedLots/initialLots*100):null,sizeKnown,complete,completionKnown:sizeKnown||decorated.length===1,parts:decorated,closeCount:decorated.length,firstCloseDate:decorated[0]?.exitDate||decorated[0]?.date||'',finalExitDate:last.exitDate||last.date||'',finalExitTime:last.exitTime||'',finalExitAt:`${last.exitDate||last.date||''} ${clock3(last.exitTime)||''}`.trim(),createdAt:Math.min(...decorated.map(t=>num(t.createdAt)||Date.now())),updatedAt:Math.max(...decorated.map(t=>num(t.updatedAt)||0))};
+  p.completionIndex=completionIndex;
+  p.parts=p.parts.map((t,i)=>{
+   let closeStatus='Partial Close';
+   if(sizeKnown){if(i===completionIndex)closeStatus='Position ครบ 100% · ส่วนสุดท้าย';else if(completionIndex>=0&&i>completionIndex)closeStatus='เกินขนาด Position ที่ระบุ';else closeStatus=`Partial Close · สะสม ${Math.min(100,((t._cumulativeClosedLots||0)/initialLots)*100).toFixed(1)}%`;}
+   else if(decorated.length===1)closeStatus='ปิดรายการเต็ม · ไม่มีขนาดเริ่มต้นในข้อมูล';
+   else closeStatus='Partial Close · ไม่ทราบขนาดเริ่มต้น';
+   const span=dateDaySpan(t.entryDate,t.exitDate||t.date);
+   const overnightKnown=tradeSourceDateKnown(t,'entry')&&tradeSourceDateKnown(t,'exit')&&span!==null;
+   const overnight=overnightKnown&&span>0;
+   return {...t,closeStatus,overnight,overnightKnown,holdingDays:span};
+  });
+  out.push(p);
+ }
+ return out.sort((a,b)=>String(a.finalExitAt).localeCompare(String(b.finalExitAt))||String(a.positionKey).localeCompare(String(b.positionKey)));
+}
+function convertCentMoney(row,convert){
+ if(!convert||!isCent(row))return row;
+ const out={...row,pnl:num(row.pnl)/100,commission:num(row.commission)/100,swap:num(row.swap)/100};
+ if(Array.isArray(row.parts))out.parts=row.parts.map(p=>convertCentMoney(p,convert));
+ return out;
+}
+function closeDateOf(t){return String(t?.exitDate||t?.date||'');}
+function withinRangeDate(value,start,end){const x=String(value||'');return !!x&&x>=fmtDate(start)&&x<=fmtDate(end);}
+function aggregateCloseByDay(parts){
+ const map=new Map();for(const t of parts){const d=closeDateOf(t);if(!d)continue;if(!map.has(d))map.set(d,0);map.set(d,map.get(d)+tradeNet(t));}
+ let cum=0;return [...map.entries()].sort((a,b)=>a[0].localeCompare(b[0])).map(([date,net])=>({date,net,cum:(cum+=net)}));
+}
+function positionPartStatus(pos,part){return part?.closeStatus||'Partial Close';}
+function partOvernightLabel(part){if(!part?.overnightKnown)return 'วันที่ไม่ครบ';return part.overnight?`Overnight${part.holdingDays>1?` ${part.holdingDays} วัน`:''}`:'ปิดในวันเดียว';}
+function partBadgesHtml(pos,part){
+ const status=positionPartStatus(pos,part),cls=status.includes('ครบ 100%')||status.includes('ปิดรายการเต็ม')?'full':'partial';
+ return `<div class="part-badges"><span class="part-badge ${cls}">${esc(status)}</span><span class="part-badge ${part.overnight?'overnight':''}">${esc(partOvernightLabel(part))}</span></div>`;
+}
+function positionPartsTable(pos,cur,editable=true){
+ return `<div class="table-wrap"><table class="parts-table"><thead><tr><th>วัน/เวลาปิด (ไทย)</th><th>Lot ปิด</th><th>ราคาออก</th><th>P&amp;L สุทธิส่วนนี้</th><th>สถานะ</th>${editable?'<th></th>':''}</tr></thead><tbody>${pos.parts.map(part=>`<tr><td>${esc(tradeDateTimeLabel(part,'exit',part.date||pos.finalExitDate))}<span class="subcell">Ticket ${esc(part.ticket||pos.ticket||'—')}</span></td><td>${num(part.lots).toFixed(3)}</td><td>${price3(part.exitPrice)}</td><td class="${tradeNet(part)>=0?'pos':'neg'}"><b>${signed(tradeNet(part),cur)}</b></td><td>${partBadgesHtml(pos,part)}</td>${editable?`<td><button class="btn small" data-edit="${esc(part.id)}">แก้ไข</button></td>`:''}</tr>`).join('')}</tbody></table></div>`;
+}
+function positionTableHtml(positions,cur){
+ if(!positions.length)return '<div class="muted">ไม่มี Position ที่เข้าในช่วงนี้</div>';
+ const rows=[...positions].sort((a,b)=>String(b.entryDate+' '+clock3(b.entryTime)).localeCompare(String(a.entryDate+' '+clock3(a.entryTime))));
+ return `<div class="table-wrap"><table class="table"><thead><tr><th>Ticket / Symbol</th><th>ฝั่ง</th><th>เข้า Position</th><th>Lot เริ่มต้น</th><th>ปิดสะสม</th><th>จำนวนส่วนปิด</th><th>P&amp;L รวมของ Position</th><th>รายละเอียด Partial Close</th></tr></thead><tbody>${rows.map(pos=>{
+  const status=pos.complete?'ปิดครบ 100%':pos.sizeKnown?`ยังไม่ครบ ${(pos.closedPercent||0).toFixed(1)}%`:'ตรวจสอบขนาดเริ่มต้น';
+  const statusClass=pos.complete?'full':'partial';
+  const firstClose=pos.firstCloseDate||pos.finalExitDate||pos.entryDate;
+  return `<tr><td><b>${esc(pos.symbol)}</b><span class="subcell">Ticket ${esc(pos.ticket||'—')}</span><span class="subcell">${esc(pos.complete?'Completed Position':pos.sizeKnown?'Partial / ยังไม่ครบ':'สถานะการปิดไม่ชัดเจน')}</span></td><td>${esc(pos.side||'')}</td><td>${esc(tradeDateTimeLabel(pos,'entry',pos.entryDate))}</td><td>${Number(pos.lots||0).toFixed(3)}</td><td>${Number(pos.closedLots||0).toFixed(3)} / ${pos.sizeKnown?Number(pos.originalPositionSize).toFixed(3):'—'} lot<span class="subcell">${pos.sizeKnown?`${Number(pos.closedPercent||0).toFixed(1)}% ปิดสะสม`:'ไม่มีขนาดเริ่มต้นจากต้นฉบับ'}</span><span class="part-badge ${statusClass}">${esc(status)}</span></td><td>${pos.closeCount}</td><td class="${tradeNet(pos)>=0?'pos':'neg'}"><b>${signed(tradeNet(pos),cur)}</b></td><td><details><summary>ดู ${pos.closeCount} ส่วนปิด${pos.parts.some(x=>x.overnight)?' · มี Overnight':''}</summary>${positionPartsTable(pos,cur,false)}</details></td></tr>`;
+ }).join('')}</tbody></table></div>`;
+}
 function metrics(trades){
  const nets=trades.map(tradeNet), wins=nets.filter(n=>n>0), losses=nets.filter(n=>n<0);
  const grossWin=wins.reduce((a,b)=>a+b,0), grossLoss=Math.abs(losses.reduce((a,b)=>a+b,0));
@@ -343,39 +446,64 @@ function openImageViewer(id){all('images').then(arr=>{const i=arr.find(x=>x.id==
 function bindImages(root,date){root.addEventListener('click',async e=>{const delb=e.target.closest('[data-delimg]');if(delb){await del('images',delb.dataset.delimg);if(state.objectUrls.has(delb.dataset.delimg)){URL.revokeObjectURL(state.objectUrls.get(delb.dataset.delimg));state.objectUrls.delete(delb.dataset.delimg)}await diary($('#page'));return}const im=e.target.closest('[data-imgid]');if(im&&!e.target.closest('[data-delimg]')){openImageViewer(im.dataset.imgid);return}const add=e.target.closest('[data-addimg]');if(add){const inp=document.createElement('input');inp.type='file';inp.accept='image/*';inp.multiple=true;inp.onchange=async()=>{for(const f of inp.files)await addImage(f,date,add.dataset.addimg);await diary($('#page'))};inp.click();}})}
 
 async function addImage(file,date,kind){await put('images',{id:uid(),date,kind,name:file.name,type:file.type,createdAt:Date.now(),blob:file});}
-async function tradeListHtml(trades,date){return sortTradesChronological(trades,date).map(t=>{
- const cur = isCent(t)?state.settings.currency+'c':state.settings.currency,mv=tradeMovement(t);
- const moveClass=mv?(mv.delta>0?'pos':mv.delta<0?'neg':''):'muted';
- return `<div class="trade-row"><div><div class="sym">${esc(t.symbol)}</div><div class="meta">เข้า ${esc(tradeDateTimeLabel(t,'entry',t.date||date))} → ออก ${esc(tradeDateTimeLabel(t,'exit',t.date||date))} · ${esc(t.side||'')} · ${Number(t.lots||0).toFixed(2)} lot</div></div><div><span class="pill">${esc(t.ticket||'')}</span><div class="meta">${esc(t.notes||'')}</div></div><div class="pl ${tradeNet(t)>=0?'pos':'neg'}">${signed(tradeNet(t),cur)}<div class="meta">เข้า ${price3(t.entryPrice)} → ออก ${price3(t.exitPrice)}</div><div class="move ${moveClass}">Δ ${mv?signedFixed(mv.delta,3):'—'} · ${mv?signedFixed(mv.pips,1)+' pips':'—'}</div><button class="btn small" data-edit="${t.id}" style="margin-top:5px">แก้ไข</button></div></div>`;
-}).join('')||'<div class="muted">ยังไม่มีออเดอร์วันนี้</div>'}
+async function tradeListHtml(trades,date){
+ const dayParts=(trades||[]).map(t=>({...t,date,exitDate:t.exitDate||date}));
+ if(!dayParts.length)return '<div class="muted">ยังไม่มีออเดอร์ปิดในวันนี้</div>';
+ const activeIds=new Set(dayParts.map(t=>t.id));
+ const allParts=flattenDayTrades(state.days);
+ // Include unsaved/current-day objects if the page is being rendered immediately after a write.
+ for(const t of dayParts)if(!allParts.some(x=>x.id===t.id))allParts.push(t);
+ const positions=groupPositionTrades(allParts).filter(pos=>pos.parts.some(part=>activeIds.has(part.id)||String(part.date||'')===date));
+ positions.sort((a,b)=>String(a.entryDate+' '+clock3(a.entryTime)).localeCompare(String(b.entryDate+' '+clock3(b.entryTime))));
+ return positions.map(pos=>{
+  const todayParts=pos.parts.filter(part=>activeIds.has(part.id)||String(part.date||'')===date);
+  const todayNet=todayParts.reduce((a,part)=>a+tradeNet(part),0),totalNet=tradeNet(pos);
+  const cur=isCent(pos)?state.settings.currency+'c':state.settings.currency;
+  const mv=tradeMovement(pos),mvClass=mv?(mv.delta>0?'pos':mv.delta<0?'neg':''):'muted';
+  const closeCount=pos.parts.length,initialLabel=pos.sizeKnown?`${pos.lots.toFixed(3)} lot เริ่มต้น`:`${pos.closedLots.toFixed(3)} lot จากรายการปิด`;
+  const completion=pos.complete?'Position ปิดครบ 100%':pos.sizeKnown?`ปิดสะสม ${(pos.closedPercent||0).toFixed(1)}%`:'ตรวจสอบขนาด Position';
+  const todayDates=[...new Set(todayParts.map(x=>x.date||x.exitDate||date))].sort();
+  const todayRange=todayParts.length?`ปิดวันนี้ ${todayParts.length} ส่วน · ${signed(todayNet,cur)}`:'ไม่มีส่วนปิดในวันนี้';
+  if(closeCount===1){
+   const part=pos.parts[0];
+   return `<div class="trade-row"><div><div class="sym">${esc(pos.symbol)}</div><div class="meta">เข้า ${esc(tradeDateTimeLabel(pos,'entry',date))} → ออก ${esc(tradeDateTimeLabel(part,'exit',date))} · ${esc(pos.side||'')} · ${initialLabel}</div>${partBadgesHtml(pos,part)}</div><div><span class="pill">${esc(pos.ticket||'')}</span><div class="meta">${esc(part.notes||'')}</div><div class="meta">${esc(completion)}</div></div><div class="pl ${tradeNet(part)>=0?'pos':'neg'}">${signed(tradeNet(part),cur)}<div class="meta">เข้า ${price3(pos.entryPrice)} → ออก ${price3(part.exitPrice)}</div><div class="move ${mvClass}">Δ ${mv?signedFixed(mv.delta,3):'—'} · ${mv?signedFixed(mv.pips,1)+' pips':'—'}</div><button class="btn small" data-edit="${esc(part.id)}" style="margin-top:5px">แก้ไข</button></div></div>`;
+  }
+  return `<details class="position-details"><summary><div class="position-summary"><div><div class="p-title">${esc(pos.symbol)}</div><div class="p-meta">${esc(pos.side||'')} · Ticket ${esc(pos.ticket||'—')}</div></div><div><div class="p-title">เข้า ${esc(tradeDateTimeLabel(pos,'entry',date))}</div><div class="p-meta">${initialLabel} · ${closeCount} ส่วนปิด · ${esc(completion)} · ${esc(todayRange)}</div></div><div class="p-net ${todayNet>=0?'pos':'neg'}">วันนี้ ${signed(todayNet,cur)}<div class="p-meta">Position รวม ${signed(totalNet,cur)}</div></div></div></summary><div class="small muted" style="padding:10px 10px 0">รายการปิดแต่ละส่วนแสดงวันที่ปิดจริง ไม่ใช่วันที่เข้า Position. วันปิดในตารางนี้อาจอยู่คนละวันกับหน้า Diary ที่กำลังดู</div>${positionPartsTable(pos,cur,true)}</details>`;
+ }).join('');
+}
 
 async function diary(app){
  state.day=await getDay(state.date);const d=state.day,wk=monday(parseDate(state.date));let strip='';
  for(let i=0;i<7;i++){const x=addDays(wk,i),k=fmtDate(x),dd=state.days.find(q=>q.date===k),p=dd?dd.trades.reduce((a,t)=>a+tradeNet(t),0):0,has=dd&&(dd.trades.length||dd.plan?.setup||dd.review?.notes);strip+=`<button class="${k===state.date?'sel':''}" data-goto="${k}"><span class="tiny">${['อา','จ','อ','พ','พฤ','ศ','ส'][x.getDay()]}</span><span class="d">${x.getDate()}</span>${dd&&dd.trades.length?`<span class="v ${p>=0?'pos':'neg'}">${p>=0?'+':''}${p.toFixed(0)}</span>`:`<span class="dot ${has?'':'hide'}"></span>`}</button>`}
  
- const stdTrades = d.trades.filter(t=>!isCent(t));
- const centTrades = d.trades.filter(t=>isCent(t));
- const mStd = metrics(stdTrades);
- const mCent = metrics(centTrades);
- let subTxt = [];
- if(stdTrades.length) subTxt.push(`Std: <b class="${mStd.net>=0?'pos':'neg'}">${signed(mStd.net, state.settings.currency)}</b>`);
- if(centTrades.length) subTxt.push(`Cent: <b class="${mCent.net>=0?'pos':'neg'}">${signed(mCent.net, state.settings.currency+'c')}</b>`);
- if(!d.trades.length) subTxt.push('ยังไม่มีออเดอร์วันนี้');
- const subHtml = subTxt.join(' <span class="muted">|</span> ');
-
- function renderTiles(m, title, cur) {
-  if(!m.total) return '';
-  return `<div style="margin-bottom:14px"><div class="row between" style="margin-bottom:8px"><h3 style="margin:0;font-size:14px;color:var(--muted)">${title}</h3><span class="pill">${m.total} ออเดอร์</span></div>
-  <div class="tiles" style="margin-bottom:0">
-  <div class="tile"><span class="l">กำไร/ขาดทุนสุทธิ</span><span class="v ${m.net>=0?'pos':'neg'}">${signed(m.net,cur)}</span></div>
-  <div class="tile"><span class="l">Winrate</span><span class="v">${(m.winrate*100).toFixed(1)}%</span><span class="s">${m.wins}W · ${m.losses}L${m.be?' · '+m.be+'BE':''}</span></div>
-  <div class="tile"><span class="l">ไม้ดีสุด / แย่สุด</span><span class="v pos">${signed(m.best,cur)}</span><span class="s neg">${signed(m.worst,cur)}</span></div>
-  <div class="tile"><span class="l">รวม lot</span><span class="v">${m.lots.toFixed(2)}</span><span class="s">Gross +${money(m.grossWin,cur)} / -${money(m.grossLoss,cur)}</span></div>
-  </div></div>`;
- }
- let tilesHtml = '';
- if(stdTrades.length) tilesHtml += renderTiles(mStd, 'พอร์ต Standard (USD)', state.settings.currency);
- if(centTrades.length) tilesHtml += renderTiles(mCent, 'พอร์ต Cent (USDc)', state.settings.currency+'c');
+  const stdTrades = d.trades.filter(t=>!isCent(t));
+  const centTrades = d.trades.filter(t => isCent(t));
+  const subStdNet=stdTrades.reduce((a,t)=>a+tradeNet(t),0),subCentNet=centTrades.reduce((a,t)=>a+tradeNet(t),0);
+  let subTxt = [];
+  if(stdTrades.length) subTxt.push(`Std: <b class="${subStdNet>=0?'pos':'neg'}">${signed(subStdNet, state.settings.currency)}</b>`);
+  if(centTrades.length) subTxt.push(`Cent: <b class="${subCentNet>=0?'pos':'neg'}">${signed(subCentNet, state.settings.currency+'c')}</b>`);
+  if(!d.trades.length) subTxt.push('วันนี้ยังไม่มีส่วนปิดสถานะ');
+  const subHtml = subTxt.join(' <span class="muted">|</span> ');
+  const allPositionGroups=groupPositionTrades(flattenDayTrades(state.days));
+  const positionsWithCloseToday=allPositionGroups.filter(pos=>pos.parts.some(part=>String(part.date||part.exitDate||'')===state.date));
+  const stdPositionsToday=positionsWithCloseToday.filter(pos=>!isCent(pos));
+  const centPositionsToday=positionsWithCloseToday.filter(pos=>isCent(pos));
+  const positionsCompletedToday=positionsWithCloseToday.filter(pos=>pos.complete&&pos.finalExitDate===state.date);
+  function renderTiles(positions, closeParts, title, cur) {
+   if(!positions.length&&!closeParts.length)return '';
+   const completed=positions.filter(pos=>pos.complete&&pos.finalExitDate===state.date),m=metrics(completed);
+   const dailyNet=closeParts.reduce((a,t)=>a+tradeNet(t),0),closedLots=closeParts.reduce((a,t)=>a+num(t.lots),0);
+   return `<div style="margin-bottom:14px"><div class="row between" style="margin-bottom:8px"><h3 style="margin:0;font-size:14px;color:var(--muted)">${title}</h3><span class="pill">${positions.length} Position · ${closeParts.length} ส่วนปิดวันนี้</span></div>
+   <div class="tiles" style="margin-bottom:0">
+   <div class="tile"><span class="l">P&amp;L ปิดจริงวันนี้</span><span class="v ${dailyNet>=0?'pos':'neg'}">${signed(dailyNet,cur)}</span><span class="s">รับรู้ตามวันที่ปิดแต่ละส่วน</span></div>
+   <div class="tile"><span class="l">Win rate · Position ปิดครบวันนี้</span><span class="v">${m.total?(m.winrate*100).toFixed(1)+'%':'—'}</span><span class="s">${m.total?`${m.wins} ชนะ · ${m.losses} แพ้${m.be?' · '+m.be+' เท่าทุน':''}`:'ยังไม่มี Position ปิดครบวันนี้'}</span></div>
+   <div class="tile"><span class="l">ดีที่สุด / แย่ที่สุด · Position</span><span class="v pos">${m.total?signed(m.best,cur):'—'}</span><span class="s neg">${m.total?signed(m.worst,cur):'—'}</span></div>
+   <div class="tile"><span class="l">ปริมาณที่ปิดวันนี้</span><span class="v">${closedLots.toFixed(3)} lot</span><span class="s">${positions.length} Position ที่มีการปิดส่วนย่อย</span></div>
+   </div></div>`;
+  }
+  let tilesHtml = '';
+  if(stdTrades.length) tilesHtml += renderTiles(stdPositionsToday, stdTrades, 'พอร์ต Standard (USD)', state.settings.currency);
+  if(centTrades.length) tilesHtml += renderTiles(centPositionsToday, centTrades, 'พอร์ต Cent (USDc)', state.settings.currency+'c');
 
  const [planImgs,mt5Imgs,reviewImgs]=await Promise.all([images('plan',state.date),images('mt5',state.date),images('review',state.date)]);
  app.innerHTML=`<div class="stack">
@@ -409,13 +537,13 @@ function bindDiary(app){
  $('#addTrade').onclick=()=>tradeModal();
  $('#readMT5').onclick=()=>mt5Modal();
  $('#previewToday').onclick=()=>previewToday();
- app.addEventListener('click',e=>{const b=e.target.closest('[data-edit]');if(b){const t=state.day.trades.find(x=>x.id===b.dataset.edit);if(t)tradeModal(t)}})
+ app.addEventListener('click',async e=>{const b=e.target.closest('[data-edit]');if(!b)return;const id=b.dataset.edit;for(const day of state.days){const t=(day.trades||[]).find(x=>x.id===id);if(t){state.day=day;state.date=day.date;tradeModal(t);return}}const t=(state.day?.trades||[]).find(x=>x.id===id);if(t)tradeModal(t)})
 }
 function tradeModal(existing=null){
  const t=existing||{id:uid(),symbol:state.settings.lastSymbol||'XAUUSD',side:'buy',lots:0.01,entryPrice:'',exitPrice:'',pnl:'',entryTime:'',exitTime:'',sl:'',tp:'',commission:'',swap:'',ticket:'',notes:''};
  const c=openModal(`<div class="modal-head"><h3>📈 ${existing?'แก้ไข':'เพิ่ม'}ออเดอร์</h3><button class="iconbtn" data-x>✕</button></div>
  <form id="tradeForm" class="formgrid"><label class="field"><span>คู่เงิน / Symbol</span><input name="symbol" required value="${esc(t.symbol)}"></label><label class="field"><span>ฝั่ง</span><select name="side"><option value="buy" ${t.side==='buy'?'selected':''}>Buy</option><option value="sell" ${t.side==='sell'?'selected':''}>Sell</option></select></label>
- <label class="field"><span>Lot</span><input name="lots" required type="number" step="any" value="${esc(t.lots)}"></label><label class="field"><span>Ticket</span><input name="ticket" value="${esc(t.ticket||'')}"></label>
+ <label class="field"><span>Lot ที่ปิดในรายการนี้</span><input name="lots" required type="number" step="any" value="${esc(t.lots)}"></label><label class="field"><span>Ticket / Deal ID</span><input name="ticket" value="${esc(t.ticket||'')}"></label><label class="field"><span>Position ID (ถ้ามี)</span><input name="positionId" value="${esc(t.positionId||'')}" placeholder="ใช้จับคู่ partial close"></label><label class="field"><span>Lot เริ่มต้นของ Position</span><input name="originalPositionSize" type="number" min="0" step="any" value="${t.originalPositionSize?esc(t.originalPositionSize):''}" placeholder="เช่น 0.50"></label>
  <label class="field"><span>ราคาเข้า (3 ตำแหน่ง)</span><input name="entryPrice" type="number" step="0.001" value="${t.entryPrice==='' ? '' : price3(t.entryPrice)}"></label><label class="field"><span>ราคาออก (3 ตำแหน่ง)</span><input name="exitPrice" type="number" step="0.001" value="${t.exitPrice==='' ? '' : price3(t.exitPrice)}"></label>
  <label class="field"><span>วันที่เข้า (เวลาไทย)</span><input value="${esc(tradeDateLabel(t,'entry',state.date))}" readonly></label><label class="field"><span>เวลาเข้า (เวลาไทย)</span><input name="entryTime" value="${esc(t.entryTime||'')}" placeholder="09:30"></label><label class="field"><span>วันที่ออก (เวลาไทย)</span><input value="${esc(tradeDateLabel(t,'exit',state.date))}" readonly></label><label class="field"><span>เวลาออก (เวลาไทย)</span><input name="exitTime" value="${esc(t.exitTime||'')}" placeholder="11:40"></label>
  <label class="field"><span>SL</span><input name="sl" type="number" step="any" value="${esc(t.sl)}"></label><label class="field"><span>TP</span><input name="tp" type="number" step="any" value="${esc(t.tp)}"></label>
@@ -423,30 +551,31 @@ function tradeModal(existing=null){
  <label class="field"><span>Swap</span><input name="swap" type="number" step="any" value="${esc(t.swap)}"></label><div></div>
  <label class="field"><span>แผนเข้าเทรด / Setup</span>${setupSelect('setup',t.setup||'')}</label>
  <label class="field"><span>Setup อื่น ๆ</span><input name="setupCustom" placeholder="ใช้เมื่อเลือก เพิ่มใหม่"></label>
- <div class="field full small muted" style="line-height:1.5">วันที่เข้า/ออกแสดงตามข้อมูล CSV หรือ Gemini หลังปรับเป็นเวลาไทยแล้ว ส่วนเวลาเข้า/ออกแก้ไขได้ที่ช่องด้านบน</div><label class="field full"><span>โน้ต (เหตุผล / อารมณ์ / execution)</span><textarea name="notes">${esc(t.notes||'')}</textarea></label></form>
+ <div class="field full small muted" style="line-height:1.5">กรณีแบ่งปิด Position เดียวกัน ให้ใช้ Position ID เดียวกันทุกส่วน และกรอก Lot เริ่มต้นให้ตรงกับขนาดตอนเปิด (เช่น 0.50) ส่วน Lot ในแต่ละรายการคือจำนวนที่ปิดครั้งนั้น วันที่เข้า/ออกแสดงตามข้อมูล CSV หรือ Gemini หลังปรับเป็นเวลาไทยแล้ว</div><label class="field full"><span>โน้ต (เหตุผล / อารมณ์ / execution)</span><textarea name="notes">${esc(t.notes||'')}</textarea></label></form>
  <div class="modal-foot">${existing?'<button class="btn danger" id="delTrade">ลบ</button>':''}<button class="btn" data-x>ยกเลิก</button><button class="btn primary" id="saveTrade">บันทึก</button></div>`);
  $$('[data-x]',c).forEach(b=>b.onclick=closeModal);
  $('#saveTrade',c).onclick=async()=>{const f=$('#tradeForm');if(!f.reportValidity())return;const fd=new FormData(f);let setup=String(fd.get('setup')||'');const custom=String(fd.get('setupCustom')||'').trim();if(setup==='__OTHER__')setup=custom;
    let rawSym=String(fd.get('symbol')).trim();
    let sym = (rawSym.endsWith('c')||rawSym.endsWith('C')) ? rawSym.slice(0,-1).toUpperCase()+'c' : rawSym.toUpperCase();
-   const now=Date.now();const z={...t,symbol:sym,side:fd.get('side'),lots:num(fd.get('lots')),entryPrice:truncate3(fd.get('entryPrice')),exitPrice:truncate3(fd.get('exitPrice')),pnl:num(fd.get('pnl')),entryTime:String(fd.get('entryTime')).trim(),exitTime:String(fd.get('exitTime')).trim(),entryDate:t.entryDate||state.date,exitDate:t.exitDate||state.date,sl:num(fd.get('sl')),tp:num(fd.get('tp')),commission:num(fd.get('commission')),swap:num(fd.get('swap')),ticket:String(fd.get('ticket')).trim(),setup,notes:String(fd.get('notes')).trim(),createdAt:t.createdAt||now,updatedAt:now};if(setup&&!setupOptions().includes(setup)){state.settings.setupOptions=[...setupOptions(),setup];await put('settings',{key:'setupOptions',value:state.settings.setupOptions});}
+   const now=Date.now();const z={...t,symbol:sym,side:fd.get('side'),lots:num(fd.get('lots')),positionId:String(fd.get('positionId')||'').trim(),originalPositionSize:num(fd.get('originalPositionSize')),entryPrice:truncate3(fd.get('entryPrice')),exitPrice:truncate3(fd.get('exitPrice')),pnl:num(fd.get('pnl')),entryTime:String(fd.get('entryTime')).trim(),exitTime:String(fd.get('exitTime')).trim(),entryDate:t.entryDate||state.date,exitDate:t.exitDate||state.date,sl:num(fd.get('sl')),tp:num(fd.get('tp')),commission:num(fd.get('commission')),swap:num(fd.get('swap')),ticket:String(fd.get('ticket')).trim(),setup,notes:String(fd.get('notes')).trim(),createdAt:t.createdAt||now,updatedAt:now};if(setup&&!setupOptions().includes(setup)){state.settings.setupOptions=[...setupOptions(),setup];await put('settings',{key:'setupOptions',value:state.settings.setupOptions});}
    state.day.deletedTradeIds=(state.day.deletedTradeIds||[]).filter(id=>id!==z.id);if(existing)Object.assign(existing,z);else state.day.trades.push(z);state.day.trades=sortTradesChronological(state.day.trades,state.date);state.day.updatedAt=now;await put('days',state.day);state.settings.lastSymbol=z.symbol;await put('settings',{key:'lastSymbol',value:z.symbol});closeModal();toast('บันทึกออเดอร์แล้ว','ok');render();};
  if(existing)$('#delTrade',c).onclick=async()=>{const now=Date.now();state.day.trades=state.day.trades.filter(x=>x.id!==existing.id);state.day.deletedTradeIds=[...new Set([...(state.day.deletedTradeIds||[]),existing.id])];state.day.updatedAt=now;await put('days',state.day);closeModal();toast('ลบออเดอร์แล้ว','ok');render()};
 }
 async function previewToday(){
- const stdTrades = state.day.trades.filter(t => !isCent(t));
- const centTrades = state.day.trades.filter(t => isCent(t));
-
- function buildBox(trades, title, cur) {
-  if(!trades.length) return '';
-  const m = metrics(trades);
-  return `<div style="margin-bottom:16px"><h4 style="margin:0 0 8px 0;color:var(--muted)">${title}</h4><p class="${m.net>=0?'pos':'neg'}" style="font-size:25px;font-weight:850;margin:0 0 10px 0">${signed(m.net,cur)}</p><div class="grid4"><div><div class="small muted">Winrate</div><b>${(m.winrate*100).toFixed(1)}%</b></div><div><div class="small muted">Profit Factor</div><b>${Number.isFinite(m.profitFactor)?m.profitFactor.toFixed(2):'∞'}</b></div><div><div class="small muted">ดีที่สุด</div><b class="pos">${signed(m.best,cur)}</b></div><div><div class="small muted">แย่สุด</div><b class="neg">${signed(m.worst,cur)}</b></div></div></div>`;
+ const closePartsToday=(state.day.trades||[]).map(t=>({...t,date:state.date,exitDate:t.exitDate||state.date}));
+ const positionsClosingToday=groupPositionTrades(flattenDayTrades(state.days)).filter(pos=>pos.parts.some(part=>String(part.date||part.exitDate||'')===state.date));
+ const stdParts=closePartsToday.filter(t=>!isCent(t)),centParts=closePartsToday.filter(t=>isCent(t));
+ const stdPositions=positionsClosingToday.filter(p=>!isCent(p)&&p.complete&&p.finalExitDate===state.date);
+ const centPositions=positionsClosingToday.filter(p=>isCent(p)&&p.complete&&p.finalExitDate===state.date);
+ function buildBox(positions,closeParts,title,cur) {
+  if(!closeParts.length&&!positions.length) return '';
+  const m=metrics(positions),dailyNet=closeParts.reduce((a,t)=>a+tradeNet(t),0);
+  return `<div style="margin-bottom:16px"><h4 style="margin:0 0 8px 0;color:var(--muted)">${title}</h4><p class="${dailyNet>=0?'pos':'neg'}" style="font-size:25px;font-weight:850;margin:0 0 3px 0">${signed(dailyNet,cur)}</p><div class="small muted" style="margin-bottom:10px">P&amp;L จากส่วนที่ปิดวันนี้ · สถิติด้านล่างนับเป็น Position ที่ปิดครบ</div><div class="grid4"><div><div class="small muted">Win rate</div><b>${m.total?(m.winrate*100).toFixed(1)+'%':'—'}</b><div class="small muted">${m.wins} ชนะ · ${m.losses} แพ้</div></div><div><div class="small muted">Profit Factor</div><b>${m.total?(Number.isFinite(m.profitFactor)?m.profitFactor.toFixed(2):'∞'):'—'}</b></div><div><div class="small muted">ดีที่สุด</div><b class="pos">${m.total?signed(m.best,cur):'—'}</b></div><div><div class="small muted">แย่สุด</div><b class="neg">${m.total?signed(m.worst,cur):'—'}</b></div></div>${!m.total?'<div class="small muted" style="margin-top:8px">วันนี้ยังไม่มี Position ที่ปิดครบ 100% จึงยังไม่นับเป็นผลชนะ/แพ้ของหนึ่งไม้</div>':''}</div>`;
  }
- let html = '';
- if(stdTrades.length) html += buildBox(stdTrades, 'พอร์ต Standard', state.settings.currency);
- if(centTrades.length) html += buildBox(centTrades, 'พอร์ต Cent', state.settings.currency+'c');
- if(!html) html = '<p class="muted">ยังไม่มีออเดอร์วันนี้</p>';
-
+ let html='';
+ if(stdParts.length||stdPositions.length)html+=buildBox(stdPositions,stdParts,'พอร์ต Standard',state.settings.currency);
+ if(centParts.length||centPositions.length)html+=buildBox(centPositions,centParts,'พอร์ต Cent',state.settings.currency+'c');
+ if(!html)html='<p class="muted">ยังไม่มีส่วนปิดสถานะวันนี้</p>';
  const imgs=await images('plan',state.date);
  const c=openModal(`<div class="modal-head"><h3>👁️ พรีวิวสรุปวันนี้</h3><button class="iconbtn" data-x>✕</button></div><section class="card" style="box-shadow:none"><h2>${thDate(state.date)}</h2>${html}${imgs.length?`<div class="imgs" style="margin-top:12px">${imgs.map(i=>`<img src="${imgUrl(i)}" style="width:150px;height:90px;object-fit:cover;border-radius:10px;border:1px solid var(--line)">`).join('')}</div>`:''}<hr style="margin:14px 0"><div class="small">${esc(state.day.review.notes||'ยังไม่มีสรุปหลังเทรด')}</div></section><div class="modal-foot"><button class="btn" data-x>ปิด</button></div>`);$$('[data-x]',c).forEach(b=>b.onclick=closeModal)
 }
@@ -523,7 +652,8 @@ function normalizeImportedTrade(raw,fallbackDate=state.date,source='file'){
  const pnl=parseNumFlexible(firstField(raw,['P&L','PnL','Pnl','PL','Profit','profit','Net Profit','Profit/Loss','กำไร','กำไร/ขาดทุน','ผลกำไร']));
  const commission=parseNumFlexible(firstField(raw,['Commission','commission','ค่าคอม','ค่าคอมมิชชั่น']));
  const swap=parseNumFlexible(firstField(raw,['Swap','swap','สวอป']));
- const ticket=String(firstField(raw,['Ticket','ticket','Ticket No','Order','Order ID','Position','Position ID','ID','หมายเลข','เลขที่'])||'').trim();
+ const ticket=String(firstField(raw,['Ticket','ticket','Ticket No','Deal Ticket','Deal ID','Order','Order ID','ID','หมายเลข','เลขที่','Position','Position ID'])||'').trim();
+ const positionId=String(firstField(raw,['position_id','Position ID','positionId','PositionID','position','Position'])||'').trim();
  const sl=parseNumFlexible(firstField(raw,['S/L','SL','stop_loss','Stop Loss','StopLoss','จุดตัดขาดทุน']));
  const tp=parseNumFlexible(firstField(raw,['T/P','TP','take_profit','Take Profit','TakeProfit','จุดทำกำไร']));
  const setup=String(firstField(raw,['Setup','Strategy','Plan','แผน','กลยุทธ์'])||'').trim();
@@ -532,7 +662,7 @@ function normalizeImportedTrade(raw,fallbackDate=state.date,source='file'){
  const equity=parseNumFlexible(firstField(raw,['equity','Equity']));
  const marginLevel=parseNumFlexible(firstField(raw,['margin_level','Margin Level','MarginLevel']));
  const journalDate=xa.date||ea.date||fallbackDate;
- return {symbol,side,lots,originalPositionSize,entryPrice,exitPrice,pnl,commission,swap,ticket,sl,tp,setup,notes,closeReason,equity,marginLevel,entryTime:ea.time,exitTime:xa.time,entryDate:ea.date,exitDate:xa.date,entryDateKnown:!!ep.dateFound,exitDateKnown:!!xp.dateFound,journalDate,rawEntryTime:entrySource,rawExitTime:exitSource,rawEntryDate:entryDateRaw,rawExitDate:exitDateRaw,timeAdjustedMinutes:offset,importSource:source};
+ return {symbol,side,lots,originalPositionSize,positionId,entryPrice,exitPrice,pnl,commission,swap,ticket,sl,tp,setup,notes,closeReason,equity,marginLevel,entryTime:ea.time,exitTime:xa.time,entryDate:ea.date,exitDate:xa.date,entryDateKnown:!!ep.dateFound,exitDateKnown:!!xp.dateFound,journalDate,rawEntryTime:entrySource,rawExitTime:exitSource,rawEntryDate:entryDateRaw,rawExitDate:exitDateRaw,timeAdjustedMinutes:offset,importSource:source};
 }
 
 function validImportedTrade(t){return !!(t.symbol||t.ticket) && (t.symbol||t.side||t.lots||t.entryTime||t.exitTime||t.pnl||t.entryPrice||t.exitPrice);}
@@ -565,7 +695,9 @@ function buildAITradePrompt(count){return `อ่านประวัติอ�
 - symbol ต้องคงตัวพิมพ์เล็ก c สำหรับพอร์ต Cent เช่น XAUUSDc.
 - side ใช้ buy หรือ sell.
 - lots, entryPrice, exitPrice, pnl, commission, swap, sl, tp เป็นตัวเลข; ถ้ามองไม่เห็นให้ใช้ 0.
-- ticket เป็นข้อความ.
+- ticket เป็นข้อความตามที่เห็นในแถว (Ticket/Deal ID).
+- positionId ให้คืน Position ID/หมายเลข Position ที่เชื่อมรายการปิดย่อยของ Position เดียวกัน หากภาพแสดง; ถ้าไม่มีให้เป็นสตริงว่าง.
+- originalPositionSize คือ Lot เริ่มต้นของ Position ก่อนแบ่งปิด ไม่ใช่ Lot ที่ปิดในแถวนั้น; อ่านเฉพาะเมื่อภาพมีขนาดเริ่มต้นอย่างชัดเจน มิฉะนั้นให้เป็น 0.
 - entryAt/exitAt ให้คืนวันและเวลาฉบับเต็มตามที่เห็นในภาพ ก่อนปรับเวลา เช่น YYYY-MM-DD HH:MM:SS.
 - entryDate/exitDate ให้คืนวันที่ YYYY-MM-DD ตามแถวเดียวกัน หากภาพมีวันที่แยกคอลัมน์กับเวลาให้จับคู่ให้ถูกต้อง; ถ้าไม่เห็นวันที่จริงให้คืนสตริงว่าง ห้ามเดาวันจากวันปัจจุบัน.
 - entryTime/exitTime ให้คืนเวลา HH:MM:SS ตามภาพด้วย แต่ระบบจะใช้ entryAt/exitAt หรือวันที่+เวลาแยกกันเพื่อสร้างวันเวลาที่สมบูรณ์.
@@ -578,7 +710,7 @@ function geminiModelOptions(){return [
  {id:'gemini-3.1-pro-preview',label:'Gemini 3.1 Pro'}
 ]}
 function geminiModelLabel(id){return geminiModelOptions().find(x=>x.id===id)?.label||id}
-function geminiResponseSchema(){return {type:'object',properties:{trades:{type:'array',items:{type:'object',properties:{symbol:{type:'string'},side:{type:'string'},lots:{type:'number'},entryPrice:{type:'number'},exitPrice:{type:'number'},entryDate:{type:'string'},exitDate:{type:'string'},entryAt:{type:'string'},exitAt:{type:'string'},entryTime:{type:'string'},exitTime:{type:'string'},pnl:{type:'number'},commission:{type:'number'},swap:{type:'number'},ticket:{type:'string'},sl:{type:'number'},tp:{type:'number'},setup:{type:'string'},notes:{type:'string'}},required:['symbol','side','lots','entryPrice','exitPrice','entryDate','exitDate','entryAt','exitAt','entryTime','exitTime','pnl','commission','swap','ticket','sl','tp','setup','notes']}}},required:['trades']}}
+function geminiResponseSchema(){return {type:'object',properties:{trades:{type:'array',items:{type:'object',properties:{symbol:{type:'string'},side:{type:'string'},lots:{type:'number'},entryPrice:{type:'number'},exitPrice:{type:'number'},entryDate:{type:'string'},exitDate:{type:'string'},entryAt:{type:'string'},exitAt:{type:'string'},entryTime:{type:'string'},exitTime:{type:'string'},pnl:{type:'number'},commission:{type:'number'},swap:{type:'number'},ticket:{type:'string'},positionId:{type:'string'},originalPositionSize:{type:'number'},sl:{type:'number'},tp:{type:'number'},setup:{type:'string'},notes:{type:'string'}},required:['symbol','side','lots','entryPrice','exitPrice','entryDate','exitDate','entryAt','exitAt','entryTime','exitTime','pnl','commission','swap','ticket','positionId','originalPositionSize','sl','tp','setup','notes']}}},required:['trades']}}
 function parseGeminiJson(text){const raw=String(text??'').trim();try{return JSON.parse(raw)}catch(_){const fenced=raw.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);if(fenced)try{return JSON.parse(fenced[1])}catch(e){}const a=raw.indexOf('{'),b=raw.lastIndexOf('}');if(a>=0&&b>a)try{return JSON.parse(raw.slice(a,b+1))}catch(e){}throw new Error('Gemini ส่งข้อมูล JSON ที่อ่านไม่ได้ กรุณาลองใหม่อีกครั้ง')}}
 async function geminiGenerate(model,key,parts){
  const endpoint=`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`;
@@ -606,72 +738,81 @@ async function aiParseImages(c,imagesList){
 }
 async function selectParsed(trades,title='ตรวจสอบรายการจากไฟล์'){
  trades=sortTradesChronological(trades,state.date);
- const c=openModal(`<div class="modal-head"><h3>${esc(title)}</h3><button class="iconbtn" data-x>✕</button></div><div class="progress-note">พบ ${trades.length} รายการ · เลือกเฉพาะรายการที่ต้องการบันทึกได้ · วัน/เวลาที่แสดงเป็น <b>หลังปรับเวลาไทย ${getTimeOffsetMinutes()>=0?'+':''}${(getTimeOffsetMinutes()/60)}</b> ชม.</div><div class="preview-wrap"><table class="table"><thead><tr><th></th><th>วันลงไดอารี่</th><th>Symbol</th><th>Side</th><th>Lot</th><th>เข้า (วัน/เวลาไทย)</th><th>ออก (วัน/เวลาไทย)</th><th>P&amp;L</th><th>Ticket</th></tr></thead><tbody>${trades.map((t,i)=>`<tr><td><input type="checkbox" data-p="${i}" checked></td><td>${esc(t.journalDate||'')}</td><td>${esc(t.symbol)}</td><td>${esc(t.side)}</td><td>${num(t.lots).toFixed(2)}</td><td>${esc(tradeDateTimeLabel(t,'entry',t.journalDate))}</td><td>${esc(tradeDateTimeLabel(t,'exit',t.journalDate))}</td><td class="${num(t.pnl)>=0?'pos':'neg'}">${num(t.pnl).toFixed(2)}</td><td>${esc(t.ticket||'')}</td></tr>`).join('')}</tbody></table></div><div class="modal-foot"><button class="btn" data-x>ยกเลิก</button><button class="btn primary" id="okParsed">เพิ่มรายการที่เลือก</button></div>`);
+ const c=openModal(`<div class="modal-head"><h3>${esc(title)}</h3><button class="iconbtn" data-x>✕</button></div><div class="progress-note">พบ ${trades.length} รายการ · เลือกเฉพาะรายการที่ต้องการบันทึกได้ · วัน/เวลาที่แสดงเป็น <b>หลังปรับเวลาไทย ${getTimeOffsetMinutes()>=0?'+':''}${(getTimeOffsetMinutes()/60)}</b> ชม.</div><div class="preview-wrap"><table class="table"><thead><tr><th></th><th>วันลงไดอารี่</th><th>Symbol</th><th>Side</th><th>Lot</th><th>เข้า (วัน/เวลาไทย)</th><th>ออก (วัน/เวลาไทย)</th><th>P&amp;L</th><th>Ticket</th><th>Position ID</th><th>Lot เริ่มต้น</th></tr></thead><tbody>${trades.map((t,i)=>`<tr><td><input type="checkbox" data-p="${i}" checked></td><td>${esc(t.journalDate||'')}</td><td>${esc(t.symbol)}</td><td>${esc(t.side)}</td><td>${num(t.lots).toFixed(2)}</td><td>${esc(tradeDateTimeLabel(t,'entry',t.journalDate))}</td><td>${esc(tradeDateTimeLabel(t,'exit',t.journalDate))}</td><td class="${num(t.pnl)>=0?'pos':'neg'}">${num(t.pnl).toFixed(2)}</td><td>${esc(t.ticket||'')}</td><td>${esc(t.positionId||'—')}</td><td>${num(t.originalPositionSize)>0?num(t.originalPositionSize).toFixed(3):'—'}</td></tr>`).join('')}</tbody></table></div><div class="modal-foot"><button class="btn" data-x>ยกเลิก</button><button class="btn primary" id="okParsed">เพิ่มรายการที่เลือก</button></div>`);
  $$('[data-x]',c).forEach(b=>b.onclick=closeModal);return new Promise(resolve=>{$('#okParsed',c).onclick=()=>{const out=trades.filter((_,i)=>$(`[data-p="${i}"]`,c)?.checked);closeModal();resolve(out)}})
 }
 
 async function dashboard(app){
  const r=range(state.period,state.anchor);
- let rawTs=tradesInRange(state.days,r.start,r.end);
- let ts=[];
+ const closePartsRaw=tradesInRange(state.days,r.start,r.end).sort(compareClosePart);
+ const allParts=flattenDayTrades(state.days);
+ const allPositions=groupPositionTrades(allParts);
+ const positionsRaw=allPositions.filter(pos=>withinRangeDate(pos.entryDate||pos.date,r.start,r.end));
  let cur=state.settings.currency||'';
- let hasStd=rawTs.some(t=>!isCent(t));
- let hasCent=rawTs.some(t=>isCent(t));
-
+ let closeParts=closePartsRaw,positions=positionsRaw,convertCents=false;
+ const combinedRows=[...closePartsRaw,...positionsRaw];
+ const hasStd=combinedRows.some(t=>!isCent(t)),hasCent=combinedRows.some(t=>isCent(t));
  if(state.portFilter==='std'){
-  ts=rawTs.filter(t=>!isCent(t));
+  closeParts=closePartsRaw.filter(t=>!isCent(t));positions=positionsRaw.filter(t=>!isCent(t));
  }else if(state.portFilter==='cent'){
-  ts=rawTs.filter(t=>isCent(t));
+  closeParts=closePartsRaw.filter(t=>isCent(t));positions=positionsRaw.filter(t=>isCent(t));cur+='c';
+ }else if(hasStd&&hasCent){
+  convertCents=true;closeParts=closePartsRaw.map(t=>convertCentMoney(t,true));positions=positionsRaw.map(t=>convertCentMoney(t,true));cur+=' (แปลงรวม)';
+ }else if(hasCent&&!hasStd){
   cur+='c';
- }else{
-  if(hasStd&&hasCent){
-   ts=rawTs.map(t=>{if(isCent(t))return{...t,pnl:num(t.pnl)/100,commission:num(t.commission)/100,swap:num(t.swap)/100};return t;});
-   cur+=' (แปลงรวม)';
-  }else{
-   ts=rawTs;
-   if(hasCent)cur+='c';
-  }
  }
- const m=metrics(ts);
-
- const eq=[];let cum=0;ts.forEach(t=>{cum+=tradeNet(t);eq.push({date:t.date,cum,net:tradeNet(t)})});
+ const completePositions=positions.filter(pos=>pos.complete).sort((a,b)=>String(a.finalExitAt).localeCompare(String(b.finalExitAt)));
+ const m=metrics(completePositions);
+ const realizedNet=closeParts.reduce((a,t)=>a+tradeNet(t),0);
+ const closePositionCount=new Set(closeParts.map(tradePositionKey)).size;
+ const dailyEquity=aggregateCloseByDay(closeParts);
+ const eq=dailyEquity.map(x=>({date:x.date,cum:x.cum,net:x.net}));
  let bars=[];
- if(state.period==='day')bars=ts.map(t=>({label:t.symbol,value:tradeNet(t)}));
- else if(state.period==='year'){const g=group(ts,t=>t.date.slice(0,7),k=>THM[Number(k.slice(5))-1]);bars=Array.from({length:12},(_,i)=>{const k=`${parseDate(state.anchor).getFullYear()}-${String(i+1).padStart(2,'0')}`,x=g.find(z=>z.label===THM[i]);return {label:THM[i],value:x?x.m.net:0}})}
- else if(state.period==='all'){bars=group(ts,t=>t.date.slice(0,7),k=>k.slice(2)).map(g=>({label:g.label,value:g.m.net}))}
- else {for(let d=new Date(r.start);d<=r.end;d=addDays(d,1)){const k=fmtDate(d),v=ts.filter(t=>t.date===k).reduce((a,t)=>a+tradeNet(t),0);bars.push({label:thDate(k,true),value:v})}}
+ if(state.period==='day'){
+  const eventMap=new Map();
+  for(const t of closeParts){const key=`${closeDateOf(t)}||${tradePositionKey(t)}`;if(!eventMap.has(key))eventMap.set(key,{label:t.symbol||'Position',date:closeDateOf(t),value:0});eventMap.get(key).value+=tradeNet(t)}
+  bars=[...eventMap.values()].sort((a,b)=>a.date.localeCompare(b.date)||a.label.localeCompare(b.label)).map((x,i)=>({...x,label:`${x.label} ${i+1}`}));
+ }else if(state.period==='year'){
+  const values=new Map();for(const t of closeParts){const k=closeDateOf(t).slice(0,7);values.set(k,(values.get(k)||0)+tradeNet(t))}
+  bars=Array.from({length:12},(_,i)=>{const k=`${parseDate(state.anchor).getFullYear()}-${String(i+1).padStart(2,'0')}`;return {label:THM[i],value:values.get(k)||0}});
+ }else if(state.period==='all'){
+  const values=new Map();for(const t of closeParts){const k=closeDateOf(t).slice(0,7);values.set(k,(values.get(k)||0)+tradeNet(t))}
+  bars=[...values.entries()].sort((a,b)=>a[0].localeCompare(b[0])).map(([k,value])=>({label:k.slice(2),value}));
+ }else{
+  for(let d=new Date(r.start);d<=r.end;d=addDays(d,1)){const k=fmtDate(d),v=closeParts.filter(t=>closeDateOf(t)===k).reduce((a,t)=>a+tradeNet(t),0);bars.push({label:thDate(k,true),value:v})}
+ }
  const dayMap=new Map();state.days.forEach(d=>{
-  let dayTs=d.trades;
-  if(state.portFilter==='std')dayTs=d.trades.filter(t=>!isCent(t));
-  if(state.portFilter==='cent')dayTs=d.trades.filter(t=>isCent(t));
-  let dNet=0; dayTs.forEach(t=>{dNet+=isCent(t)&&state.portFilter==='all'?tradeNet(t)/100:tradeNet(t)});
-  dayMap.set(d.date,{net:dNet,count:dayTs.length,hasNote:!!(d.plan?.setup||d.review?.notes)})
+  let dayTs=d.trades||[];
+  if(state.portFilter==='std')dayTs=dayTs.filter(t=>!isCent(t));
+  if(state.portFilter==='cent')dayTs=dayTs.filter(t=>isCent(t));
+  let dNet=0;dayTs.forEach(t=>{dNet+=isCent(t)&&state.portFilter==='all'&&hasStd?tradeNet(t)/100:tradeNet(t)});
+  dayMap.set(d.date,{net:dNet,count:new Set(dayTs.map(tradePositionKey)).size,closeParts:dayTs.length,hasNote:!!(d.plan?.setup||d.review?.notes)});
  });
- const bySymbol=group(ts,t=>t.symbol,k=>k),bySide=group(ts,t=>t.side,k=>k==='buy'?'Buy':'Sell'),byDow=group(ts,t=>parseDate(t.date).getDay(),k=>THD[Number(k)]);
- const sub=state.period==='year'?group(ts,t=>t.date.slice(0,7),k=>THMF[Number(k.slice(5))-1]):state.period==='month'?group(ts,t=>isoWeek(parseDate(t.date)),k=>`สัปดาห์ ${k}`):state.period==='all'?group(ts,t=>t.date.slice(0,4),k=>`ปี ${k}`):group(ts,t=>t.date,k=>thDate(k));
- 
- let tableTs = rawTs;
- if(state.portFilter==='std') tableTs=rawTs.filter(t=>!isCent(t));
- if(state.portFilter==='cent') tableTs=rawTs.filter(t=>isCent(t));
-
+ const bySymbol=group(completePositions,t=>t.symbol,k=>k),bySide=group(completePositions,t=>t.side,k=>k==='buy'?'Buy':'Sell'),byDow=group(completePositions,t=>parseDate(t.entryDate||t.date).getDay(),k=>THD[Number(k)]);
+ const sub=state.period==='year'?group(completePositions,t=>(t.entryDate||t.date).slice(0,7),k=>THMF[Number(k.slice(5))-1]):state.period==='month'?group(completePositions,t=>isoWeek(parseDate(t.entryDate||t.date)),k=>`สัปดาห์ ${k}`):state.period==='all'?group(completePositions,t=>(t.entryDate||t.date).slice(0,4),k=>`ปี ${k}`):group(completePositions,t=>t.entryDate||t.date,k=>thDate(k));
+ const partialPositions=positions.filter(pos=>!pos.complete).length;
+ const statsLabel=`สถิติ Win/Loss, PF, R:R และ Max Drawdown นับจาก Position ที่เข้าในช่วงที่เลือก และปิดครบแล้ว โดยรวม partial close ของ Position เดียวกันเป็นผลลัพธ์เดียว · P&amp;L รายวันนับตามวันที่ปิดแต่ละส่วนจริง`;
  app.innerHTML=`<div class="stack">
  <div class="top"><h1>📊 สรุปผล</h1><div class="top-actions"><button class="btn" id="exportTop">⬇ สำรอง</button><button class="btn" id="importTop">⬆ นำเข้า</button></div></div>
  <div class="periodbar"><div class="seg">${[['day','วัน'],['week','สัปดาห์'],['month','เดือน'],['year','ปี'],['all','ทั้งหมด']].map(([p,l])=>`<button class="${state.period===p?'on':''}" data-period="${p}">${l}</button>`).join('')}</div><div class="periodnav ${state.period==='all'?'hide':''}"><button class="iconbtn" id="shiftL">‹</button><span class="lbl">${esc(state.period==='day'?thDate(state.anchor):r.label)}</span><button class="iconbtn" id="shiftR">›</button><button class="btn small" id="dashToday">วันนี้</button></div><div class="seg" style="margin-left:auto;background:var(--card2)"><button class="${state.portFilter==='all'?'on':''}" data-portf="all">รวมทุกพอร์ต</button><button class="${state.portFilter==='std'?'on':''}" data-portf="std">Standard</button><button class="${state.portFilter==='cent'?'on':''}" data-portf="cent">Cent</button></div></div>
- <div class="tiles"><div class="tile hero">${donut(m.winrate)}<div><span class="l">กำไร/ขาดทุนสุทธิ${cur?` (${esc(cur)})`:''}</span><span class="v ${m.net>=0?'pos':'neg'}">${signed(m.net,cur)}</span><span class="s">${m.total} ออเดอร์ · ${m.wins} ชนะ · ${m.losses} แพ้${m.be?` · ${m.be} เท่าทุน`:''}</span></div></div>
- <div class="tile"><span class="l">Profit factor</span><span class="v">${Number.isFinite(m.profitFactor)?m.profitFactor.toFixed(2):'∞'}</span><span class="s">กำไรรวม ÷ ขาดทุนรวม</span></div>
- <div class="tile"><span class="l">Expectancy</span><span class="v ${m.expectancy>=0?'pos':'neg'}">${signed(m.expectancy,cur)}</span><span class="s">กำไรเฉลี่ยต่อไม้</span></div>
- <div class="tile"><span class="l">R:R เฉลี่ย</span><span class="v">${Number.isFinite(m.rr)?m.rr.toFixed(2):'∞'}</span><span class="s">ชนะเฉลี่ย ${money(m.avgWin,cur)} / แพ้เฉลี่ย ${money(m.avgLoss,cur)}</span></div>
- <div class="tile"><span class="l">Max drawdown</span><span class="v neg">${money(m.maxDD,cur)}</span><span class="s">จากจุดสูงสุดของกำไรสะสม</span></div>
- <div class="tile"><span class="l">ไม้ดีสุด</span><span class="v pos">${signed(m.best,cur)}</span></div><div class="tile"><span class="l">ไม้แย่สุด</span><span class="v neg">${signed(m.worst,cur)}</span></div>
- <div class="tile"><span class="l">ชนะติดกันสูงสุด</span><span class="v">${m.maxWinStreak}</span><span class="s">แพ้ติดกัน ${m.maxLossStreak}</span></div><div class="tile"><span class="l">รวม lot</span><span class="v">${m.lots.toFixed(2)}</span><span class="s">Gross +${money(m.grossWin,cur)} / -${money(m.grossLoss,cur)}</span></div></div>
- <section class="card"><div class="card-head"><h2>📈 กำไรสะสม</h2><span class="small muted">${eq.length} ออเดอร์</span></div><div class="chartbox">${drawLine(eq)}</div></section>
- <section class="card"><div class="card-head"><h2>📊 กำไร/ขาดทุน ${state.period==='day'?'ทีละออเดอร์':state.period==='year'?'รายเดือน':'รายวัน'}</h2></div><div class="chartbox">${drawBars(bars)}</div></section>
- ${state.period==='month'?`<section class="card"><div class="card-head"><h2>🗓️ ปฏิทิน</h2><span class="small muted">แตะวันเพื่อเปิดไดอารี่</span></div><div class="cal">${calHtml(parseDate(state.anchor).getFullYear(),parseDate(state.anchor).getMonth(),dayMap)}</div></section>`:''}${(()=>{const z=setupAnalytics(ts);return `<div class="grid2">${setupStatsTable('🏆 ผลงานแยกตาม Setup',z.setup,cur)}${setupStatsTable('🎯 Asset × Setup',z.matrix,cur)}</div>`})()}
- ${priceMovementTable(ts)}
- ${timeOfDayTable(ts,cur)}
- <div class="grid2">${groupTable('ตามวัน/สัปดาห์ในช่วงที่เลือก',sub,cur)}${groupTable('ตามคู่เงิน',bySymbol,cur)}${groupTable('ตาม Buy / Sell',bySide,cur)}${groupTable('ตามวันในสัปดาห์',byDow,cur)}</div>
- <section class="card"><div class="card-head"><h2>📜 รายการออเดอร์</h2><span class="small muted">${tableTs.length} รายการ</span></div>${tableTs.length?`<div class="table-wrap"><table class="table"><thead><tr><th>วันที่</th><th>คู่เงิน</th><th>ฝั่ง</th><th>Lot</th><th>ราคาเข้า<br><span class="subcell">วันที่/เวลาไทย</span></th><th>ราคาออก<br><span class="subcell">วันที่/เวลาไทย</span></th><th>Δ ราคา</th><th>Pips</th><th>กำไร</th></tr></thead><tbody>${[...tableTs].reverse().map(t=>{const mv=tradeMovement(t);return `<tr class="clickable" data-open="${t.date}"><td class="muted">${t.date}</td><td><b>${esc(t.symbol)}</b></td><td>${esc(t.side)}</td><td>${num(t.lots).toFixed(2)}</td><td>${price3(t.entryPrice)}<span class="subcell">${esc(tradeDateTimeLabel(t,'entry',t.date))}</span></td><td>${price3(t.exitPrice)}<span class="subcell">${esc(tradeDateTimeLabel(t,'exit',t.date))}</span></td><td class="${mv?(mv.delta>0?'pos':mv.delta<0?'neg':''):''}">${mv?signedFixed(mv.delta,3):'—'}</td><td class="${mv?(mv.pips>0?'pos':mv.pips<0?'neg':''):''}">${mv?signedFixed(mv.pips,1):'—'}</td><td class="${tradeNet(t)>=0?'pos':'neg'}"><b>${signed(tradeNet(t),isCent(t)?state.settings.currency+'c':state.settings.currency)}</b></td></tr>`}).join('')}</tbody></table></div>`:'<div class="muted">ไม่มีออเดอร์ในช่วงนี้</div>'}</section></div>`;
- $$('[data-period]').forEach(b=>b.onclick=()=>{state.period=b.dataset.period;render()});$('#shiftL').onclick=()=>{state.anchor=shift(state.period,state.anchor,-1);render()};$('#shiftR').onclick=()=>{state.anchor=shift(state.period,state.anchor,1);render()};$('#dashToday').onclick=()=>{state.anchor=today();render()};$$('[data-cal]').forEach(b=>b.onclick=()=>href('diary',b.dataset.cal));$$('[data-open]').forEach(b=>b.onclick=()=>href('diary',b.dataset.open));$('#exportTop').onclick=exportBackup;$('#importTop').onclick=importBackup;
+ <p class="analysis-note">${statsLabel}</p>
+ <div class="tiles"><div class="tile hero">${donut(m.winrate)}<div><span class="l">กำไร/ขาดทุนที่ปิดจริงในช่วงนี้${cur?` (${esc(cur)})`:''}</span><span class="v ${realizedNet>=0?'pos':'neg'}">${signed(realizedNet,cur)}</span><span class="s">${closePositionCount} Position มีส่วนปิด · ${closeParts.length} ส่วนปิด · ${positions.length} Position ที่เข้าในช่วงนี้</span></div></div>
+ <div class="tile"><span class="l">Position ปิดครบที่ใช้วัดสถิติ</span><span class="v">${m.total}</span><span class="s">Win rate ${(m.winrate*100).toFixed(1)}% · ${m.wins} ชนะ · ${m.losses} แพ้${m.be?` · ${m.be} เท่าทุน`:''}</span></div>
+ <div class="tile"><span class="l">Profit factor · ต่อ Position</span><span class="v">${Number.isFinite(m.profitFactor)?m.profitFactor.toFixed(2):'∞'}</span><span class="s">กำไรรวม ÷ ขาดทุนรวม ของ Position ปิดครบ</span></div>
+ <div class="tile"><span class="l">Expectancy · ต่อ Position</span><span class="v ${m.expectancy>=0?'pos':'neg'}">${signed(m.expectancy,cur)}</span><span class="s">กำไร/ขาดทุนเฉลี่ยต่อ Position ปิดครบ</span></div>
+ <div class="tile"><span class="l">R:R เฉลี่ยจากผลจริง</span><span class="v">${Number.isFinite(m.rr)?m.rr.toFixed(2):'∞'}</span><span class="s">ชนะเฉลี่ย ${money(m.avgWin,cur)} / แพ้เฉลี่ย ${money(m.avgLoss,cur)}</span></div>
+ <div class="tile"><span class="l">Max drawdown · ต่อ Position</span><span class="v neg">${money(m.maxDD,cur)}</span><span class="s">จากลำดับการปิด Position ที่ครบแล้ว</span></div>
+ <div class="tile"><span class="l">Position ดีที่สุด</span><span class="v pos">${m.total?signed(m.best,cur):'—'}</span></div><div class="tile"><span class="l">Position แย่ที่สุด</span><span class="v neg">${m.total?signed(m.worst,cur):'—'}</span></div>
+ <div class="tile"><span class="l">ชนะติดกันสูงสุด</span><span class="v">${m.maxWinStreak}</span><span class="s">แพ้ติดกัน ${m.maxLossStreak}</span></div><div class="tile"><span class="l">Lot เริ่มต้นรวมของ Position</span><span class="v">${positions.reduce((a,p)=>a+num(p.lots),0).toFixed(3)}</span><span class="s">มี ${partialPositions} Position ที่ข้อมูลการปิดยังไม่ครบ 100%</span></div></div>
+ <section class="card"><div class="card-head"><h2>📈 กำไรสะสมตามวันที่ปิดจริง</h2><span class="small muted">${dailyEquity.length} วันปิดที่มีข้อมูล</span></div><div class="chartbox">${drawLine(eq)}</div></section>
+ <section class="card"><div class="card-head"><h2>📊 P&amp;L แยกตาม ${state.period==='day'?'Position ที่มีส่วนปิดวันนี้':state.period==='year'?'เดือนที่ปิด':'วันที่ปิดจริง'}</h2></div><div class="chartbox">${drawBars(bars)}</div></section>
+ ${state.period==='month'?`<section class="card"><div class="card-head"><h2>🗓️ ปฏิทิน P&amp;L ตามวันปิดจริง</h2><span class="small muted">แตะวันเพื่อเปิดไดอารี่</span></div><div class="cal">${calHtml(parseDate(state.anchor).getFullYear(),parseDate(state.anchor).getMonth(),dayMap)}</div></section>`:''}
+ ${(()=>{const z=setupAnalytics(completePositions);return `<div class="grid2">${setupStatsTable('🏆 ผลงานแยกตาม Setup · Position',z.setup,cur)}${setupStatsTable('🎯 Asset × Setup · Position',z.matrix,cur)}</div>`})()}
+ ${priceMovementTable(completePositions)}
+ ${timeOfDayTable(completePositions,cur)}
+ <div class="grid2">${groupTable('ตามวัน/สัปดาห์ที่เข้า Position',sub,cur)}${groupTable('ตามสินทรัพย์',bySymbol,cur)}${groupTable('ตาม Buy / Sell',bySide,cur)}${groupTable('ตามวันในสัปดาห์ที่เข้า',byDow,cur)}</div>
+ <section class="card"><div class="card-head"><h2>📜 รายการ Position ที่เข้าในช่วงนี้</h2><span class="small muted">${positions.length} Position · ไม่ได้นับ partial close เป็นไม้ใหม่</span></div>${positionTableHtml(positions,cur)}</section></div>`;
+ $$('[data-period]').forEach(b=>b.onclick=()=>{state.period=b.dataset.period;render()});$('#shiftL').onclick=()=>{state.anchor=shift(state.period,state.anchor,-1);render()};$('#shiftR').onclick=()=>{state.anchor=shift(state.period,state.anchor,1);render()};$('#dashToday').onclick=()=>{state.anchor=today();render()};$$('[data-cal]').forEach(b=>b.onclick=()=>href('diary',b.dataset.cal));$('#exportTop').onclick=exportBackup;$('#importTop').onclick=importBackup;
  $$('[data-portf]').forEach(b=>b.onclick=()=>{state.portFilter=b.dataset.portf;render()});
 }
 async function settings(app){
@@ -720,18 +861,66 @@ function mergeDayRecords(local,remote){
  out.deletedTradeIds=[...new Set([...(local.deletedTradeIds||[]),...(remote.deletedTradeIds||[])])];out.trades=mergeTradeArrays(local.trades||[],remote.trades||[],out.deletedTradeIds);return out;
 }
 function mergeDays(localDays=[],remoteDays=[]){const map=new Map();for(const d of localDays||[])map.set(d.date,d);for(const rd of remoteDays||[])map.set(rd.date,mergeDayRecords(map.get(rd.date),rd));return [...map.values()].sort((a,b)=>a.date.localeCompare(b.date));}
+function syncStatus(message){
+ const e=$('#toast');if(!e)return;clearTimeout(e._t);e._t=null;e.textContent=message;e.className='toast';e.hidden=false;
+}
+async function forEachLimit(items,limit,worker,onProgress){
+ let next=0,done=0;const errors=[];const count=Math.min(Math.max(1,limit),items.length);
+ await Promise.all(Array.from({length:count},async()=>{while(true){const i=next++;if(i>=items.length)return;try{await worker(items[i],i)}catch(error){errors.push({item:items[i],error})}finally{done++;if(onProgress)onProgress(done,items.length,items[i])}}}));
+ return {done:items.length,errors};
+}
 async function driveSync(){
- try{await driveToken();toast('กำลังอ่านข้อมูลล่าสุดจาก Google Drive…');const root=await driveResolveRoot();const files=await driveList(root);const df=files.find(f=>f.name==='trade-memo-data.json');const localData=await exportData(false);let remoteData=null;if(df)try{remoteData=JSON.parse(await driveDownload(df.id))}catch(_){remoteData=null}
-  const mergedDays=mergeDays(localData.days,remoteData?.days||[]);for(const d of mergedDays)await put('days',d);state.days=mergedDays;
-  if(remoteData?.settings){const rs=remoteData.settings;for(const k of ['currency','startingBalance','driveFolderName','lastSymbol','setupOptions','timeOffsetMinutes','geminiModel'])if(rs[k]!==undefined)state.settings[k]=rs[k];state.settings.setupOptions=[...new Set([...setupOptions(),...(rs.setupOptions||[])])];state.settings.pipSizeBySymbol={...(state.settings.pipSizeBySymbol||{}),...(rs.pipSizeBySymbol||{})};await Promise.all(Object.entries(rs).filter(([k])=>!['driveRootId','driveImagesId','driveClientId','lastSync','syncRevision'].includes(k)).map(([k,v])=>put('settings',{key:k,value:k==='pipSizeBySymbol'?state.settings.pipSizeBySymbol:v})));await saveScalarSetting('pipSizeBySymbol',state.settings.pipSizeBySymbol)}
+ const started=Date.now();
+ try{
+  await driveToken();syncStatus('กำลังเตรียม Google Drive Sync…');
+  const root=await driveResolveRoot();
+  const files=await driveList(root),df=files.find(f=>f.name==='trade-memo-data.json');
+  const localData=await exportData(false);let remoteData=null;
+  if(df){try{remoteData=JSON.parse(await driveDownload(df.id))}catch(e){throw new Error('อ่าน trade-memo-data.json จาก Drive ไม่สำเร็จ: '+e.message)}}
+  syncStatus('กำลังรวมข้อมูล Order และบันทึกข้อมูลหลัก…');
+  const mergedDays=mergeDays(localData.days,remoteData?.days||[]);
+  // Write the merged day records in parallel; each date is an independent IndexedDB key.
+  await Promise.all(mergedDays.map(d=>put('days',d)));state.days=mergedDays;
+  if(remoteData?.settings){
+   const rs=remoteData.settings;
+   for(const k of ['currency','startingBalance','driveFolderName','lastSymbol','setupOptions','timeOffsetMinutes','geminiModel'])if(rs[k]!==undefined)state.settings[k]=rs[k];
+   state.settings.setupOptions=[...new Set([...setupOptions(),...(rs.setupOptions||[])])];
+   state.settings.pipSizeBySymbol={...(state.settings.pipSizeBySymbol||{}),...(rs.pipSizeBySymbol||{})};
+   await Promise.all(Object.entries(rs).filter(([k])=>!['driveRootId','driveImagesId','driveClientId','lastSync','syncRevision'].includes(k)).map(([k,v])=>put('settings',{key:k,value:k==='pipSizeBySymbol'?state.settings.pipSizeBySymbol:v})));
+   await saveScalarSetting('pipSizeBySymbol',state.settings.pipSizeBySymbol);
+  }
   state.settings.syncRevision=Math.max(Date.now(),num(remoteData?.settings?.syncRevision)+1);await saveScalarSetting('syncRevision',state.settings.syncRevision);
-  const imageMeta=[...new Map([...(remoteData?.images||[]),...(localData.images||[])].map(im=>[im.id,im])).values()];const merged={version:4,app:'Trade Memo Private',exportedAt:new Date().toISOString(),settings:{currency:state.settings.currency,startingBalance:state.settings.startingBalance,theme:state.settings.theme,driveFolderName:state.settings.driveFolderName,lastSymbol:state.settings.lastSymbol,setupOptions:setupOptions(),timeOffsetMinutes:state.settings.timeOffsetMinutes,syncRevision:state.settings.syncRevision,geminiModel:state.settings.geminiModel,pipSizeBySymbol:state.settings.pipSizeBySymbol||{}},days:mergedDays,images:imageMeta,imageData:{}};
-  const blob=new Blob([JSON.stringify(merged)],{type:'application/json'});if(df)await driveUpload({name:'trade-memo-data.json'},blob,df.id);else await driveUpload({name:'trade-memo-data.json',parents:[root]},blob);
-  const imgFolder=await driveFolder('images',root);await saveScalarSetting('driveImagesId',imgFolder);const remoteImgs=await driveList(imgFolder),haveRemote=new Set(remoteImgs.map(f=>f.name));for(const im of await all('images')){const ext=(im.type||'image/png').split('/')[1].replace('jpeg','jpg'),name=`${im.id}.${ext}`;if(!haveRemote.has(name))await driveUpload({name,parents:[imgFolder]},im.blob)}
-  const localImgs=await all('images'),haveLocal=new Set(localImgs.map(x=>x.id)),remoteMeta=new Map((remoteData?.images||[]).map(x=>[x.id,x]));for(const f of await driveList(imgFolder)){const m=f.name.match(/^(.+)\.(png|jpg|jpeg|webp|gif)$/i);if(!m||haveLocal.has(m[1]))continue;try{const b=await driveDownloadBlob(f.id),meta=remoteMeta.get(m[1])||{};await put('images',{id:m[1],date:meta.date||'',kind:meta.kind||'mt5',name:meta.name||f.name,type:meta.type||b.type||f.mimeType,createdAt:meta.createdAt||Date.now(),blob:b})}catch(_){} }
-  state.settings.lastSync=new Date().toISOString();await saveScalarSetting('lastSync',state.settings.lastSync);await loadData();await render();toast('Sync สำเร็จ: รวมข้อมูลล่าสุดจาก iMac/iPhone แล้ว','ok')
+  const imageMeta=[...new Map([...(remoteData?.images||[]),...(localData.images||[])].map(im=>[im.id,im])).values()];
+  const merged={version:4,app:'Trade Memo Private',exportedAt:new Date().toISOString(),settings:{currency:state.settings.currency,startingBalance:state.settings.startingBalance,theme:state.settings.theme,driveFolderName:state.settings.driveFolderName,lastSymbol:state.settings.lastSymbol,setupOptions:setupOptions(),timeOffsetMinutes:state.settings.timeOffsetMinutes,syncRevision:state.settings.syncRevision,geminiModel:state.settings.geminiModel,pipSizeBySymbol:state.settings.pipSizeBySymbol||{}},days:mergedDays,images:imageMeta,imageData:{}};
+  const blob=new Blob([JSON.stringify(merged)],{type:'application/json'});
+  if(df)await driveUpload({name:'trade-memo-data.json'},blob,df.id);else await driveUpload({name:'trade-memo-data.json',parents:[root]},blob);
+
+  const imgFolder=await driveFolder('images',root);await saveScalarSetting('driveImagesId',imgFolder);
+  const remoteImgs=await driveList(imgFolder),remoteByName=new Map(remoteImgs.map(f=>[f.name,f]));
+  const localImgs=await all('images');
+  const pendingUploads=localImgs.map(im=>{const ext=(im.type||'image/png').split('/')[1].replace('jpeg','jpg'),name=`${im.id}.${ext}`;return {im,name}}).filter(x=>!remoteByName.has(x.name));
+  const uploadResult=await forEachLimit(pendingUploads,3,async({im,name})=>{
+   await driveUpload({name,parents:[imgFolder]},im.blob);
+  },(done,total)=>syncStatus(`กำลังอัปโหลดภาพ ${done}/${total}…`));
+
+  const haveLocal=new Set(localImgs.map(x=>x.id)),remoteMeta=new Map((remoteData?.images||[]).map(x=>[x.id,x]));
+  const pendingDownloads=remoteImgs.map(f=>{const m=f.name.match(/^(.+)\.(png|jpg|jpeg|webp|gif)$/i);return m?{file:f,id:m[1]}:null}).filter(x=>x&&!haveLocal.has(x.id));
+  const downloadResult=await forEachLimit(pendingDownloads,3,async({file,id})=>{
+   const b=await driveDownloadBlob(file.id),meta=remoteMeta.get(id)||{};
+   await put('images',{id,date:meta.date||'',kind:meta.kind||'mt5',name:meta.name||file.name,type:meta.type||b.type||file.mimeType,createdAt:meta.createdAt||Date.now(),blob:b});
+  },(done,total)=>syncStatus(`กำลังดาวน์โหลดภาพ ${done}/${total}…`));
+
+  state.settings.lastSync=new Date().toISOString();await saveScalarSetting('lastSync',state.settings.lastSync);await loadData();await render();
+  const secs=Math.max(1,Math.round((Date.now()-started)/1000));
+  const failedUploads=uploadResult.errors.length,failedDownloads=downloadResult.errors.length;
+  if(failedUploads||failedDownloads){
+   toast(`Sync ข้อมูลสำเร็จ (${secs} วินาที) แต่มีภาพที่ยังไม่ครบ: อัปโหลด ${failedUploads}, ดาวน์โหลด ${failedDownloads} รายการ — กด Sync ซ้ำเพื่อลองอีกครั้ง`,'err');
+  }else{
+   toast(`Sync สำเร็จ (${secs} วินาที): รวมข้อมูล iMac/iPhone แล้ว${pendingUploads.length||pendingDownloads.length?` · ภาพใหม่ ${pendingUploads.length} อัปโหลด / ${pendingDownloads.length} ดาวน์โหลด`:''}`,'ok');
+  }
  }catch(e){toast('Sync ไม่สำเร็จ: '+e.message,'err')}
 }
+
 function driveSignOut(){if(gToken&&window.google)google.accounts.oauth2.revoke(gToken,()=>{});gToken=null;gExp=0;toast('ออกจาก Google แล้ว','ok')}
 
 window.addEventListener('hashchange',()=>{const h=location.hash.replace(/^#\/?/,'');const [v,d]=h.split('/');state.view=['diary','dashboard','settings'].includes(v)?v:'diary';if(state.view==='diary'&&/^\d{4}-\d{2}-\d{2}$/.test(d||''))state.date=d;render()});
