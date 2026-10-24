@@ -1,9 +1,9 @@
 {
-  "name":"Trade Memo Private V10",
-  "short_name":"Trade Memo",
-  "start_url":"./",
-  "display":"standalone",
-  "background_color":"#0b1220",
-  "theme_color":"#0b1220",
-  "icons":[]
+  "name": "Trade Memo Private V11",
+  "short_name": "Trade Memo",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#191825",
+  "theme_color": "#191825",
+  "icons": []
 }
